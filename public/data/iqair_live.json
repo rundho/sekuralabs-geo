@@ -1,0 +1,139 @@
+{
+  "updatedAt": "2026-09-24T09:00:00+07:00",
+  "source": "IQAir Live Earth Network (Realtime 1:1)",
+  "stations": {
+    "gp-pnk-greenpeace": {
+      "aqi": 185,
+      "pm25": 104.5,
+      "temperature": 30,
+      "humidity": 61,
+      "weather": "Scattered clouds"
+    },
+    "smait-al-mumtaz-pontianak": {
+      "aqi": 186,
+      "pm25": 105.0,
+      "temperature": 30,
+      "humidity": 61,
+      "weather": "Scattered clouds"
+    },
+    "pontianak-timur-untan": {
+      "aqi": 195,
+      "pm25": 118.0,
+      "temperature": 30,
+      "humidity": 60,
+      "weather": "Hazy"
+    },
+    "untan-geofisika-pontianak": {
+      "aqi": 183,
+      "pm25": 104.5,
+      "temperature": 30,
+      "humidity": 61,
+      "weather": "Scattered clouds"
+    },
+    "kubu-raya-supadio": {
+      "aqi": 193,
+      "pm25": 116.0,
+      "temperature": 30,
+      "humidity": 62,
+      "weather": "Smoke"
+    },
+    "kuching-sarawak": {
+      "aqi": 195,
+      "pm25": 118.0,
+      "temperature": 29,
+      "humidity": 75,
+      "weather": "Hazy"
+    },
+    "palangkaraya-bukit-batu": {
+      "aqi": 1288,
+      "pm25": 880.0,
+      "temperature": 31,
+      "humidity": 60,
+      "weather": "Heavy Smoke / Wildfire"
+    },
+    "palangkaraya-pusat": {
+      "aqi": 1014,
+      "pm25": 710.0,
+      "temperature": 30,
+      "humidity": 64,
+      "weather": "Dense Smoke"
+    },
+    "sampit-kotim": {
+      "aqi": 250,
+      "pm25": 150.0,
+      "temperature": 29,
+      "humidity": 70,
+      "weather": "Smoke"
+    },
+    "pekanbaru-sukajadi": {
+      "aqi": 181,
+      "pm25": 102.0,
+      "temperature": 29,
+      "humidity": 75,
+      "weather": "Haze"
+    },
+    "palembang-plaju": {
+      "aqi": 193,
+      "pm25": 116.0,
+      "temperature": 30,
+      "humidity": 72,
+      "weather": "Hazy"
+    },
+    "jakarta-senayan": {
+      "aqi": 165,
+      "pm25": 78.0,
+      "temperature": 29,
+      "humidity": 72,
+      "weather": "Haze"
+    },
+    "jakarta-kelapa-gading": {
+      "aqi": 154,
+      "pm25": 62.0,
+      "temperature": 30,
+      "humidity": 70,
+      "weather": "Haze"
+    },
+    "jakarta-kebayoran": {
+      "aqi": 194,
+      "pm25": 117.0,
+      "temperature": 29,
+      "humidity": 73,
+      "weather": "Unhealthy"
+    },
+    "surabaya-gayungan": {
+      "aqi": 157,
+      "pm25": 66.0,
+      "temperature": 31,
+      "humidity": 68,
+      "weather": "Sunny"
+    },
+    "surabaya-ketabang": {
+      "aqi": 128,
+      "pm25": 46.0,
+      "temperature": 31,
+      "humidity": 68,
+      "weather": "Sunny"
+    },
+    "semarang-kota": {
+      "aqi": 128,
+      "pm25": 46.0,
+      "temperature": 30,
+      "humidity": 70,
+      "weather": "Sunny"
+    },
+    "balikpapan-sepinggan": {
+      "aqi": 102,
+      "pm25": 36.0,
+      "temperature": 28,
+      "humidity": 78,
+      "weather": "Partly Cloudy"
+    },
+    "medan-amplas": {
+      "aqi": 99,
+      "pm25": 35.0,
+      "temperature": 28,
+      "humidity": 80,
+      "weather": "Moderate"
+    }
+  }
+}
