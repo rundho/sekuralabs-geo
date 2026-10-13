@@ -83,10 +83,7 @@ export function buildMapStyle(
         minzoom: 0,
         maxzoom: 19,
         layout: {
-          visibility: showLabels ? 'visible' : 'none',
-        },
-        paint: {
-          'raster-opacity': 0.22,
+          visibility: 'none', // Sepenuhnya digantikan oleh CityLabelsLayer vektor yang tajam & modern
         },
       },
     ],

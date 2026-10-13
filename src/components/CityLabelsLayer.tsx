@@ -39,9 +39,9 @@ export const CityLabelsLayer: React.FC<CityLabelsLayerProps> = ({ map, visible =
             'interpolate',
             ['linear'],
             ['zoom'],
-            3.5, 2.0,
-            6, 2.8,
-            9, 3.6,
+            3.5, 2.8,
+            6, 3.6,
+            9, 4.5,
           ],
           'circle-color': [
             'case',
@@ -49,9 +49,9 @@ export const CityLabelsLayer: React.FC<CityLabelsLayerProps> = ({ map, visible =
             '#00e5ff', // Cyan neon untuk kota utama/ibukota (Pontianak, Jakarta, dll)
             '#94a3b8', // Slate untuk kota pendukung
           ],
-          'circle-stroke-width': 1.5,
+          'circle-stroke-width': 1.8,
           'circle-stroke-color': '#020617',
-          'circle-opacity': 0.95,
+          'circle-opacity': 1.0,
         },
       });
 
@@ -70,23 +70,23 @@ export const CityLabelsLayer: React.FC<CityLabelsLayerProps> = ({ map, visible =
             'interpolate',
             ['linear'],
             ['zoom'],
-            3.5, 11.5,
-            5, 13.0,
-            7, 14.5,
-            10, 16.5,
+            3.5, 12.0,
+            5, 13.5,
+            7, 15.0,
+            10, 17.5,
           ],
-          'text-offset': [0, 0.7],
+          'text-offset': [0, 0.8],
           'text-anchor': 'top',
-          'text-letter-spacing': 0.03,
+          'text-letter-spacing': 0.04,
           'text-allow-overlap': true, // Ibukota utama seperti Pontianak selalu tampil, tidak di-hide oleh tabrakan
           'text-ignore-placement': true,
           visibility: visible ? 'visible' : 'none',
         },
         paint: {
           'text-color': '#ffffff', // Putih bersih terang
-          'text-halo-color': '#030712', // Shadow outline hitam pekat agar terbaca jelas di atas asap
-          'text-halo-width': 2.6,
-          'text-halo-blur': 0.5,
+          'text-halo-color': '#020617', // Shadow outline hitam pekat tebal agar terbaca jelas di atas asap
+          'text-halo-width': 3.0,
+          'text-halo-blur': 0.2,
         },
       });
 
