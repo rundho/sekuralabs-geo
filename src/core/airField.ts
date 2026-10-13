@@ -170,17 +170,17 @@ export function rasteriseGrid(
       const aqi = aqiRes?.aqi ?? 0;
       const [r, g, b] = aqiToRgb(aqi);
 
-      // Kurva transparansi adaptif: Samudra/udara bersih tetap tembus basemap gelap,
-      // sedangkan area asap, sedang, hingga berbahaya tampil tebal & pekat (solid).
+      // Kurva transparansi adaptif: Samudra/udara bersih tembus basemap gelap,
+      // area asap pekat tetap dramatis namun kontur daratan pulau tetap terlihat jelas.
       let baseAlpha: number;
       if (aqi <= 20) {
-        baseAlpha = 0.15 + (aqi / 20) * 0.35;
+        baseAlpha = 0.08 + (aqi / 20) * 0.24;
       } else if (aqi <= 50) {
-        baseAlpha = 0.50 + ((aqi - 20) / 30) * 0.28;
+        baseAlpha = 0.32 + ((aqi - 20) / 30) * 0.24;
       } else if (aqi <= 150) {
-        baseAlpha = 0.78 + ((aqi - 50) / 100) * 0.14;
+        baseAlpha = 0.56 + ((aqi - 50) / 100) * 0.22;
       } else {
-        baseAlpha = Math.min(0.98, 0.92 + ((aqi - 150) / 150) * 0.06);
+        baseAlpha = Math.min(0.92, 0.78 + ((aqi - 150) / 150) * 0.14);
       }
 
       // Lembutkan tepi kotak boundary

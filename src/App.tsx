@@ -16,6 +16,7 @@ import { Header } from './components/Header';
 import { InfoModal } from './components/InfoModal';
 import { handleMapInspectionClick } from './components/LocationPopup';
 import { fetchLiveIqairFeed, getHydratedStations, type HydratedAirStation } from './core/iqair';
+import { CoastlineLayer } from './components/CoastlineLayer';
 
 export const App: React.FC = () => {
   const [map, setMap] = useState<maplibregl.Map | null>(null);
@@ -29,7 +30,7 @@ export const App: React.FC = () => {
   const [showLabels, setShowLabels] = useState(true);
   const [stationsVisible, setStationsVisible] = useState(false);
   const [pm25Visible, setPm25Visible] = useState(true);
-  const [pm25Opacity, setPm25Opacity] = useState(0.82);
+  const [pm25Opacity, setPm25Opacity] = useState(0.76);
   const [windVisible, setWindVisible] = useState(true);
   const [windSpeedMultiplier, setWindSpeedMultiplier] = useState(1.0);
   const [hotspotsVisible, setHotspotsVisible] = useState(false);
@@ -232,6 +233,9 @@ export const App: React.FC = () => {
             setSidebarOpen(false); // Otomatis tutup sidebar agar kartu stasiun tampak jelas
           }}
         />
+
+        {/* Lapisan Garis Pantai & Kontur Pulau Nusantara (High-contrast island boundaries) */}
+        <CoastlineLayer map={map} visible={showLabels} />
 
         {/* Lapisan Titik Panas Karhutla (NASA FIRMS VIIRS 375m) */}
         <HotspotsLayer
