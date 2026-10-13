@@ -17,6 +17,7 @@ import { InfoModal } from './components/InfoModal';
 import { handleMapInspectionClick } from './components/LocationPopup';
 import { fetchLiveIqairFeed, getHydratedStations, type HydratedAirStation } from './core/iqair';
 import { CoastlineLayer } from './components/CoastlineLayer';
+import { CityLabelsLayer } from './components/CityLabelsLayer';
 
 export const App: React.FC = () => {
   const [map, setMap] = useState<maplibregl.Map | null>(null);
@@ -236,6 +237,9 @@ export const App: React.FC = () => {
 
         {/* Lapisan Garis Pantai & Kontur Pulau Nusantara (High-contrast island boundaries) */}
         <CoastlineLayer map={map} visible={showLabels} />
+
+        {/* Lapisan Label Nama Kota & Ibukota Vektor Presisi (Pontianak selalu tampak) */}
+        <CityLabelsLayer map={map} visible={showLabels} />
 
         {/* Lapisan Titik Panas Karhutla (NASA FIRMS VIIRS 375m) */}
         <HotspotsLayer

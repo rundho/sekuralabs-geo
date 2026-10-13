@@ -58,8 +58,10 @@ export const AirQualityLayer: React.FC<AirQualityLayerProps> = ({
         animate: false,
       });
 
-      // Menempatkan layer PM2.5 di BAWAH garis pantai & basemap-labels agar kontur pulau tetap tampak tegas
-      const beforeId = m.getLayer('sekura-lyr-coastline-halo')
+      // Menempatkan layer PM2.5 di BAWAH titik kota, garis pantai, & basemap-labels
+      const beforeId = m.getLayer('sekura-lyr-city-dots')
+        ? 'sekura-lyr-city-dots'
+        : m.getLayer('sekura-lyr-coastline-halo')
         ? 'sekura-lyr-coastline-halo'
         : m.getLayer('basemap-labels')
         ? 'basemap-labels'

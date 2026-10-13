@@ -34,8 +34,8 @@ export const Header: React.FC<HeaderProps> = ({
           </svg>
         </div>
         <div className="brand-title">
-          Sekuralabs Geo
-          <span className="brand-badge">V2.0</span>
+          SekuraLabs Geo
+          <span className="brand-badge">Alpha 0.1</span>
         </div>
       </div>
 

@@ -53,6 +53,8 @@ export function buildMapStyle(
   const cfg = BASEMAP_CONFIGS[type];
   return {
     version: 8,
+    glyphs:
+      'https://cdn.jsdelivr.net/gh/kylebarron/openmaptiles-fonts/fonts/{fontstack}/{range}.pbf',
     sources: {
       'basemap-base-source': {
         type: 'raster',
@@ -82,6 +84,9 @@ export function buildMapStyle(
         maxzoom: 19,
         layout: {
           visibility: showLabels ? 'visible' : 'none',
+        },
+        paint: {
+          'raster-opacity': 0.22,
         },
       },
     ],
