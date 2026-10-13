@@ -28,14 +28,33 @@ export interface AirStepResponse {
 const stepCache = new Map<string, AirStepResponse>();
 let cachedIndex: AirIndexResponse | null = null;
 
+async function smartFetch(url: string, fallbackPath: string): Promise<Response> {
+  try {
+    const res = await fetch(url, { cache: 'no-cache' });
+    if (res.ok) return res;
+    throw new Error(`Direct HTTP ${res.status}`);
+  } catch (directErr) {
+    // Fallback ke local Edge proxy /air/... (Cloudflare Pages Function) jika R2 mengalami issue CORS
+    try {
+      const res = await fetch(fallbackPath);
+      if (res.ok) return res;
+    } catch {
+      // Abaikan jika fallback juga gagal
+    }
+    throw directErr;
+  }
+}
+
 /** Mengambil metadata index grid CAMS */
 export async function fetchAirIndex(forceRefresh = false): Promise<AirIndexResponse> {
   if (cachedIndex && !forceRefresh) {
     return cachedIndex;
   }
 
-  const url = `${CDN_BASE_URL}/air/index.json?_t=${Date.now()}`;
-  const res = await fetch(url, { cache: 'no-cache' });
+  const directUrl = `${CDN_BASE_URL}/air/index.json?_t=${Date.now()}`;
+  const fallbackUrl = `/air/index.json?_t=${Date.now()}`;
+  const res = await smartFetch(directUrl, fallbackUrl);
+
   if (!res.ok) {
     throw new Error(`Gagal memuat indeks data udara (HTTP ${res.status})`);
   }
@@ -60,10 +79,11 @@ export async function fetchAirStep(
   }
 
   const prefix = index.steps ?? 'air/t';
-  const url = `${CDN_BASE_URL}/${prefix}/${encodeURIComponent(timestampKey)}.json`;
+  const directUrl = `${CDN_BASE_URL}/${prefix}/${encodeURIComponent(timestampKey)}.json`;
+  const fallbackUrl = `/${prefix}/${encodeURIComponent(timestampKey)}.json`;
 
   try {
-    const res = await fetch(url);
+    const res = await smartFetch(directUrl, fallbackUrl);
     if (!res.ok) {
       console.warn(`[Sekuralabs Geo] Step ${timestampKey} tidak ditemukan (HTTP ${res.status})`);
       return null;
