@@ -1,154 +1,189 @@
-import React, { useEffect } from 'react';
-import type maplibregl from 'maplibre-gl';
+import React, { useEffect, useRef } from 'react';
+import maplibregl from 'maplibre-gl';
+import { INDONESIA_CITIES, type CityItem } from '../data/cities';
 
 interface CityLabelsLayerProps {
   map: maplibregl.Map | null;
   visible?: boolean;
 }
 
-const SRC_CITIES = 'sekura-src-cities';
-const LYR_CITY_DOTS = 'sekura-lyr-city-dots';
-const LYR_CITY_LABELS_T1 = 'sekura-lyr-city-labels-t1';
-const LYR_CITY_LABELS_T2 = 'sekura-lyr-city-labels-t2';
+interface CityMarkerEntry {
+  marker: maplibregl.Marker;
+  city: CityItem;
+  container: HTMLDivElement;
+  dotEl: HTMLSpanElement;
+  nameEl: HTMLSpanElement;
+}
 
+/**
+ * CityLabelsLayer
+ * Menggunakan DOM Marker berkinerja tinggi berbasis font Google 'Outfit' & 'Inter'.
+ * Menjamin kota-kota besar (termasuk Pontianak) 100% permanen tampil saat zoom out,
+ * dengan penataan arah label (align) cerdas bebas tabrakan antarkota.
+ */
 export const CityLabelsLayer: React.FC<CityLabelsLayerProps> = ({ map, visible = true }) => {
+  const markerEntriesRef = useRef<CityMarkerEntry[]>([]);
+
   useEffect(() => {
+    // Bersihkan marker lama
+    markerEntriesRef.current.forEach((entry) => entry.marker.remove());
+    markerEntriesRef.current = [];
+
     if (!map) return;
 
-    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-    const dataUrl = `${base}/data/cities_id.json`;
+    // Buat DOM marker untuk setiap kota
+    INDONESIA_CITIES.forEach((city) => {
+      const align = city.align || 'right';
+      const isTier1 = city.tier === 1;
 
-    const addCities = () => {
-      if (map.getSource(SRC_CITIES)) return;
+      const container = document.createElement('div');
+      container.className = `sekura-city-label-marker tier-${city.tier} align-${align}`;
 
-      map.addSource(SRC_CITIES, {
-        type: 'geojson',
-        data: dataUrl,
+      // Tentukan flex-direction dan anchor berdasarkan orientasi align
+      let flexDirection = 'row';
+      let anchor: maplibregl.PositionAnchor = 'left';
+
+      if (align === 'left') {
+        flexDirection = 'row-reverse';
+        anchor = 'right';
+      } else if (align === 'bottom') {
+        flexDirection = 'column';
+        anchor = 'top';
+      } else if (align === 'top') {
+        flexDirection = 'column-reverse';
+        anchor = 'bottom';
+      } else {
+        // default 'right'
+        flexDirection = 'row';
+        anchor = 'left';
+      }
+
+      container.style.cssText = `
+        pointer-events: none;
+        user-select: none;
+        display: ${visible ? 'flex' : 'none'};
+        flex-direction: ${flexDirection};
+        align-items: center;
+        white-space: nowrap;
+        line-height: 1;
+        transition: opacity 0.2s ease;
+      `;
+
+      // Dot penunjuk koordinat kota
+      const dotEl = document.createElement('span');
+      dotEl.className = 'city-dot';
+      const dotSize = isTier1 ? '6px' : '4px';
+
+      // Hitung margin dot agar titik tengah dot persis di pusat koordinat
+      let dotMargin = '0 5px 0 -3px';
+      if (align === 'left') dotMargin = '0 -3px 0 5px';
+      else if (align === 'bottom') dotMargin = '-3px 0 4px 0';
+      else if (align === 'top') dotMargin = '4px 0 -3px 0';
+
+      dotEl.style.cssText = `
+        display: inline-block;
+        width: ${dotSize};
+        height: ${dotSize};
+        border-radius: 50%;
+        background-color: ${isTier1 ? '#00e5ff' : '#94a3b8'};
+        box-shadow: ${isTier1 ? '0 0 8px #00e5ff, 0 0 2px #000' : '0 0 4px #020617'};
+        border: 1px solid ${isTier1 ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.5)'};
+        margin: ${dotMargin};
+        flex-shrink: 0;
+      `;
+
+      // Label teks nama kota
+      const nameEl = document.createElement('span');
+      nameEl.className = 'city-name-text';
+      nameEl.textContent = city.name;
+      nameEl.style.cssText = `
+        font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-weight: ${isTier1 ? '700' : '600'};
+        color: ${isTier1 ? '#ffffff' : '#cbd5e1'};
+        text-shadow: 0 0 3px #020617, -1.2px -1.2px 0 #020617, 1.2px -1.2px 0 #020617, -1.2px 1.2px 0 #020617, 1.2px 1.2px 0 #020617, 0 2px 5px rgba(0, 0, 0, 0.95);
+        letter-spacing: 0.03em;
+        line-height: 1;
+      `;
+
+      container.appendChild(dotEl);
+      container.appendChild(nameEl);
+
+      const marker = new maplibregl.Marker({
+        element: container,
+        anchor,
+      })
+        .setLngLat([city.lng, city.lat])
+        .addTo(map);
+
+      markerEntriesRef.current.push({
+        marker,
+        city,
+        container,
+        dotEl,
+        nameEl,
       });
+    });
 
-      // 1. Titik koordinat kota (Cyan radar pulse dot)
-      map.addLayer({
-        id: LYR_CITY_DOTS,
-        type: 'circle',
-        source: SRC_CITIES,
-        layout: {
-          visibility: visible ? 'visible' : 'none',
-        },
-        paint: {
-          'circle-radius': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            3.5, 2.8,
-            6, 3.6,
-            9, 4.5,
-          ],
-          'circle-color': [
-            'case',
-            ['==', ['get', 'tier'], 1],
-            '#00e5ff', // Cyan neon untuk kota utama/ibukota (Pontianak, Jakarta, dll)
-            '#94a3b8', // Slate untuk kota pendukung
-          ],
-          'circle-stroke-width': 1.8,
-          'circle-stroke-color': '#020617',
-          'circle-opacity': 1.0,
-        },
+    // Kontrol visibilitas & ukuran berbasis zoom dinamis
+    const updateZoomScaling = () => {
+      if (!map) return;
+      const zoom = map.getZoom();
+
+      markerEntriesRef.current.forEach((entry) => {
+        const { city, container, dotEl, nameEl } = entry;
+        const isTier1 = city.tier === 1;
+        const minZ = city.minZoom ?? (isTier1 ? 3.0 : 5.5);
+
+        if (!visible || zoom < minZ) {
+          container.style.display = 'none';
+          return;
+        }
+
+        container.style.display = 'flex';
+
+        if (isTier1) {
+          if (zoom < 4.5) {
+            // Zoom out (Nusantara overview)
+            nameEl.style.fontSize = '11px';
+            nameEl.style.letterSpacing = '0.04em';
+            dotEl.style.width = '5px';
+            dotEl.style.height = '5px';
+          } else if (zoom < 6.5) {
+            // Zoom menengah (Regional pulau)
+            nameEl.style.fontSize = '12.5px';
+            nameEl.style.letterSpacing = '0.03em';
+            dotEl.style.width = '6px';
+            dotEl.style.height = '6px';
+          } else {
+            // Zoom in dekat (Detail area)
+            nameEl.style.fontSize = '14.5px';
+            nameEl.style.letterSpacing = '0.02em';
+            dotEl.style.width = '7px';
+            dotEl.style.height = '7px';
+          }
+        } else {
+          // Tier 2
+          if (zoom < 7.0) {
+            nameEl.style.fontSize = '11px';
+            dotEl.style.width = '4px';
+            dotEl.style.height = '4px';
+          } else {
+            nameEl.style.fontSize = '13px';
+            dotEl.style.width = '5px';
+            dotEl.style.height = '5px';
+          }
+        }
       });
-
-      // 2. Label Teks Tier 1: Ibukota provinsi & kota besar (Pontianak, dll)
-      // Selalu terlihat dari zoom paling jauh (minzoom 3.0), tidak akan hilang saat zoom out!
-      map.addLayer({
-        id: LYR_CITY_LABELS_T1,
-        type: 'symbol',
-        source: SRC_CITIES,
-        filter: ['==', ['get', 'tier'], 1],
-        minzoom: 3.0,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-font': ['Open Sans Bold'],
-          'text-size': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            3.5, 12.0,
-            5, 13.5,
-            7, 15.0,
-            10, 17.5,
-          ],
-          'text-offset': [0, 0.8],
-          'text-anchor': 'top',
-          'text-letter-spacing': 0.04,
-          'text-allow-overlap': true, // Ibukota utama seperti Pontianak selalu tampil, tidak di-hide oleh tabrakan
-          'text-ignore-placement': true,
-          visibility: visible ? 'visible' : 'none',
-        },
-        paint: {
-          'text-color': '#ffffff', // Putih bersih terang
-          'text-halo-color': '#020617', // Shadow outline hitam pekat tebal agar terbaca jelas di atas asap
-          'text-halo-width': 3.0,
-          'text-halo-blur': 0.2,
-        },
-      });
-
-      // 3. Label Teks Tier 2: Kota berkembang & penyangga (Singkawang, Ketapang, dll)
-      // Muncul otomatis saat peta mulai di-zoom in (minzoom 5.5)
-      map.addLayer({
-        id: LYR_CITY_LABELS_T2,
-        type: 'symbol',
-        source: SRC_CITIES,
-        filter: ['==', ['get', 'tier'], 2],
-        minzoom: 5.5,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-font': ['Open Sans Regular'],
-          'text-size': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            5.5, 10.5,
-            7, 12.0,
-            10, 14.0,
-          ],
-          'text-offset': [0, 0.7],
-          'text-anchor': 'top',
-          'text-letter-spacing': 0.02,
-          'text-allow-overlap': false,
-          visibility: visible ? 'visible' : 'none',
-        },
-        paint: {
-          'text-color': '#e2e8f0',
-          'text-halo-color': '#030712',
-          'text-halo-width': 2.0,
-        },
-      });
-
-      // Pastikan layer label nama kota selalu diposisikan di paling atas
-      if (map.getLayer(LYR_CITY_DOTS)) map.moveLayer(LYR_CITY_DOTS);
-      if (map.getLayer(LYR_CITY_LABELS_T2)) map.moveLayer(LYR_CITY_LABELS_T2);
-      if (map.getLayer(LYR_CITY_LABELS_T1)) map.moveLayer(LYR_CITY_LABELS_T1);
     };
 
-    if (map.isStyleLoaded()) {
-      addCities();
-    } else {
-      map.once('style.load', addCities);
-    }
+    updateZoomScaling();
+    map.on('zoom', updateZoomScaling);
 
     return () => {
-      if (map.getLayer(LYR_CITY_LABELS_T2)) map.removeLayer(LYR_CITY_LABELS_T2);
-      if (map.getLayer(LYR_CITY_LABELS_T1)) map.removeLayer(LYR_CITY_LABELS_T1);
-      if (map.getLayer(LYR_CITY_DOTS)) map.removeLayer(LYR_CITY_DOTS);
-      if (map.getSource(SRC_CITIES)) map.removeSource(SRC_CITIES);
+      map.off('zoom', updateZoomScaling);
+      markerEntriesRef.current.forEach((entry) => entry.marker.remove());
+      markerEntriesRef.current = [];
     };
-  }, [map, visible]);
-
-  // Handle visibility toggle
-  useEffect(() => {
-    if (!map) return;
-    const vis = visible ? 'visible' : 'none';
-    if (map.getLayer(LYR_CITY_DOTS)) map.setLayoutProperty(LYR_CITY_DOTS, 'visibility', vis);
-    if (map.getLayer(LYR_CITY_LABELS_T1)) map.setLayoutProperty(LYR_CITY_LABELS_T1, 'visibility', vis);
-    if (map.getLayer(LYR_CITY_LABELS_T2)) map.setLayoutProperty(LYR_CITY_LABELS_T2, 'visibility', vis);
   }, [map, visible]);
 
   return null;
