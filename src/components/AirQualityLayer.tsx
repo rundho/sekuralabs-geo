@@ -156,13 +156,12 @@ export const AirQualityLayer: React.FC<AirQualityLayerProps> = ({
       ctx.clearRect(0, 0, composeCv.width, composeCv.height);
       ctx.drawImage(rasterCv, 0, 0, composeCv.width, composeCv.height);
 
-      const src = map.getSource(SRC_PM25) as maplibregl.CanvasSource | undefined;
+      const src = map.getSource(SRC_PM25) as any;
       if (src) {
-        src.play();
-        requestAnimationFrame(() => {
-          try {
-            src.pause();
-          } catch {}
+        src._playing = true;
+        map.triggerRepaint();
+        map.once('render', () => {
+          if (src) src._playing = false;
         });
       }
 

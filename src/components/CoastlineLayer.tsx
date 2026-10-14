@@ -78,29 +78,35 @@ export const CoastlineLayer: React.FC<CoastlineLayerProps> = ({ map, visible = t
     }
 
     // Pastikan jika layer PM2.5 sudah ada, posisinya tetap di bawah garis pantai
-    if (map.getLayer('sekura-lyr-pm25')) {
-      if (map.getLayer(LYR_COASTLINE_HALO)) map.moveLayer(LYR_COASTLINE_HALO);
-      if (map.getLayer(LYR_COASTLINE_CORE)) map.moveLayer(LYR_COASTLINE_CORE);
-    }
+    try {
+      if (map.getLayer('sekura-lyr-pm25')) {
+        if (map.getLayer(LYR_COASTLINE_HALO)) map.moveLayer(LYR_COASTLINE_HALO);
+        if (map.getLayer(LYR_COASTLINE_CORE)) map.moveLayer(LYR_COASTLINE_CORE);
+      }
+    } catch {}
   }, [map, visible]);
 
   useEffect(() => {
     if (!map) return;
 
-    if (map.isStyleLoaded()) {
-      addCoastlines();
-    } else {
-      map.once('style.load', addCoastlines);
-    }
+    try {
+      if (map.isStyleLoaded()) {
+        addCoastlines();
+      } else {
+        map.once('style.load', addCoastlines);
+      }
+    } catch {}
 
     map.on('style.load', addCoastlines);
 
     return () => {
       if (map) {
-        map.off('style.load', addCoastlines);
-        if (map.getLayer(LYR_COASTLINE_CORE)) map.removeLayer(LYR_COASTLINE_CORE);
-        if (map.getLayer(LYR_COASTLINE_HALO)) map.removeLayer(LYR_COASTLINE_HALO);
-        if (map.getSource(SRC_COASTLINE)) map.removeSource(SRC_COASTLINE);
+        try {
+          map.off('style.load', addCoastlines);
+          if (map.getLayer(LYR_COASTLINE_CORE)) map.removeLayer(LYR_COASTLINE_CORE);
+          if (map.getLayer(LYR_COASTLINE_HALO)) map.removeLayer(LYR_COASTLINE_HALO);
+          if (map.getSource(SRC_COASTLINE)) map.removeSource(SRC_COASTLINE);
+        } catch {}
       }
     };
   }, [map, addCoastlines]);

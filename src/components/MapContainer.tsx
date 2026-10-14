@@ -145,6 +145,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
 
     map.on('load', () => {
       mapInstanceRef.current = map;
+      (window as any).__map = map;
       onMapLoaded(map);
     });
 

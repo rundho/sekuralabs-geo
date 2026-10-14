@@ -258,7 +258,11 @@ export const LayerControlDrawer: React.FC<LayerControlDrawerProps> = ({
 
           {/* Active Layer: Titik Panas Karhutla (NASA FIRMS VIIRS 375m) */}
           <div className="layer-card" style={{ marginTop: 10 }}>
-            <div className="layer-head">
+            <div
+              className="layer-head"
+              style={{ cursor: 'pointer' }}
+              onClick={() => onToggleHotspots(!hotspotsVisible)}
+            >
               <div className="layer-info">
                 <div className="layer-icon-box" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>
                   <Flame size={18} />
@@ -268,9 +272,10 @@ export const LayerControlDrawer: React.FC<LayerControlDrawerProps> = ({
                   <p>Satelit NASA VIIRS 375m (24 Jam NRT)</p>
                 </div>
               </div>
-              <label className="switch">
+              <label className="switch" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="checkbox"
+                  id="toggle-hotspots"
                   checked={hotspotsVisible}
                   onChange={(e) => onToggleHotspots(e.target.checked)}
                 />
@@ -309,7 +314,11 @@ export const LayerControlDrawer: React.FC<LayerControlDrawerProps> = ({
           </div>
           {/* Active Layer: Citra Satelit Awan & Asap (JMA Himawari-9 / NASA GIBS) */}
           <div className="layer-card" style={{ marginTop: 10 }}>
-            <div className="layer-head">
+            <div
+              className="layer-head"
+              style={{ cursor: 'pointer' }}
+              onClick={() => onToggleSatellite(!satelliteVisible)}
+            >
               <div className="layer-info">
                 <div className="layer-icon-box" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
                   <Satellite size={18} />
@@ -319,9 +328,10 @@ export const LayerControlDrawer: React.FC<LayerControlDrawerProps> = ({
                   <p>Himawari-9 Live 10m (JMA / NASA)</p>
                 </div>
               </div>
-              <label className="switch">
+              <label className="switch" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="checkbox"
+                  id="toggle-satellite"
                   checked={satelliteVisible}
                   onChange={(e) => onToggleSatellite(e.target.checked)}
                 />

@@ -49,7 +49,7 @@ export const App: React.FC = () => {
 
   // Satellite Himawari-9 layer settings (ala Zoom Earth)
   const [satelliteVisible, setSatelliteVisible] = useState(false);
-  const [satelliteOpacity, setSatelliteOpacity] = useState(0.85);
+  const [satelliteOpacity, setSatelliteOpacity] = useState(0.95);
   const [satelliteMode, setSatelliteMode] = useState<SatelliteMode>('auto');
   const [satelliteLoopActive, setSatelliteLoopActive] = useState(false);
   const [satelliteSpeed, setSatelliteSpeed] = useState<SatelliteAnimationSpeed>('medium');
@@ -137,20 +137,14 @@ export const App: React.FC = () => {
     setPlaying(false);
   }, []);
 
-  // Playback timer loop (mendukung per jam CAMS maupun loop Himawari dengan kontrol kecepatan)
+  // Playback timer loop (hanya untuk linimasa per jam CAMS; loop Satelit dikelola 60 FPS rAF di SatelliteCloudLayer)
   useEffect(() => {
     if (!playing) {
       if (playTimerRef.current) clearInterval(playTimerRef.current);
       return;
     }
 
-    if (satelliteLoopActive) {
-      if (satelliteFrames.length === 0) return;
-      const speedMs = SATELLITE_SPEED_CONFIGS[satelliteSpeed]?.stepMs || 750;
-      playTimerRef.current = window.setInterval(() => {
-        setSatelliteStepIndex((prev) => (prev + 1) % satelliteFrames.length);
-      }, speedMs);
-    } else {
+    if (!satelliteLoopActive) {
       if (!index || index.times.length === 0) return;
       playTimerRef.current = window.setInterval(() => {
         setCurrentStepIndex((prev) => (prev + 1) % index.times.length);
@@ -160,7 +154,7 @@ export const App: React.FC = () => {
     return () => {
       if (playTimerRef.current) clearInterval(playTimerRef.current);
     };
-  }, [playing, satelliteLoopActive, satelliteFrames, satelliteSpeed, index]);
+  }, [playing, satelliteLoopActive, index]);
 
   // Sinkronisasi data kartu stasiun yang sedang terbuka saat grid CAMS berganti jam
   useEffect(() => {
@@ -287,24 +281,23 @@ export const App: React.FC = () => {
         {/* Lapisan Garis Pantai & Kontur Pulau Nusantara (High-contrast island boundaries) */}
         <CoastlineLayer map={map} visible={showLabels} />
 
-        {/* Lapisan Citra Satelit Awan & Asap Geostasioner Himawari-9 (NASA GIBS) dengan Dual-Buffer Crossfader */}
+        {/* Lapisan Citra Satelit Awan & Asap Geostasioner Himawari-9 (NASA GIBS) Continuous 60 FPS Engine */}
         <SatelliteCloudLayer
           map={map}
           visible={satelliteVisible}
           opacity={satelliteOpacity}
           mode={satelliteMode}
+          frames={satelliteLoopActive ? satelliteFrames : undefined}
+          currentStepIndex={satelliteLoopActive ? satelliteStepIndex : 0}
           currentTimeIso={
             satelliteLoopActive
               ? satelliteFrames[satelliteStepIndex]?.iso
               : index?.times[currentStepIndex]
           }
-          nextTimeIso={
-            satelliteLoopActive
-              ? satelliteFrames[(satelliteStepIndex + 1) % satelliteFrames.length]?.iso
-              : undefined
-          }
+          playing={playing && satelliteLoopActive}
+          onStepChange={setSatelliteStepIndex}
+          speed={satelliteSpeed}
           animationStyle={satelliteStyle}
-          crossfadeDurationMs={SATELLITE_SPEED_CONFIGS[satelliteSpeed].crossfadeMs}
           onResolvedModeChange={setResolvedSatelliteMode}
         />
 
@@ -347,7 +340,21 @@ export const App: React.FC = () => {
         onToggleHotspots={setHotspotsVisible}
         hotspotsCount={hotspotsCount}
         satelliteVisible={satelliteVisible}
-        onToggleSatellite={setSatelliteVisible}
+        onToggleSatellite={(vis) => {
+          setSatelliteVisible(vis);
+          if (vis) {
+            const newFrames = generateSatelliteLoopFrames(satelliteDuration);
+            setSatelliteFrames(newFrames);
+            setSatelliteStepIndex(newFrames.length - 1);
+            setSatelliteLoopActive(true);
+            // Otomatis pindah ke peta satelit Esri & matikan lapisan asap/udara PM2.5
+            setBasemap('satellite');
+            setPm25Visible(false);
+          } else {
+            setSatelliteLoopActive(false);
+          }
+          setPlaying(false);
+        }}
         satelliteOpacity={satelliteOpacity}
         onSatelliteOpacityChange={setSatelliteOpacity}
         satelliteMode={satelliteMode}
@@ -359,6 +366,8 @@ export const App: React.FC = () => {
             setSatelliteFrames(newFrames);
             setSatelliteStepIndex(newFrames.length - 1);
             setSatelliteVisible(true);
+            setBasemap('satellite');
+            setPm25Visible(false);
           }
           setSatelliteLoopActive(active);
           setPlaying(false);

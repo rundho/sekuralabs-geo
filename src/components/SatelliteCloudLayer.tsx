@@ -2,9 +2,12 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import type maplibregl from 'maplibre-gl';
 import {
   type SatelliteMode,
+  type SatelliteAnimationSpeed,
   type SatelliteAnimationStyle,
+  type SatelliteLoopFrame,
   clampToLatestHimawariTime,
   getSatelliteTileUrl,
+  SATELLITE_SPEED_CONFIGS,
 } from '../core/satellite';
 
 interface SatelliteCloudLayerProps {
@@ -12,48 +15,76 @@ interface SatelliteCloudLayerProps {
   visible?: boolean;
   opacity?: number;
   mode?: SatelliteMode;
+  frames?: SatelliteLoopFrame[];
+  currentStepIndex?: number;
   currentTimeIso?: string;
-  nextTimeIso?: string;
+  playing?: boolean;
+  onStepChange?: (index: number) => void;
+  speed?: SatelliteAnimationSpeed;
   animationStyle?: SatelliteAnimationStyle;
-  crossfadeDurationMs?: number;
   onResolvedModeChange?: (mode: 'visible' | 'infrared' | 'airmass') => void;
 }
 
-const SRC_A = 'sekura-src-satellite-a';
-const LYR_A = 'sekura-lyr-satellite-a';
-const SRC_B = 'sekura-src-satellite-b';
-const LYR_B = 'sekura-lyr-satellite-b';
+const SRC_PREFIX = 'sekura-sat-src-';
+const LYR_PREFIX = 'sekura-sat-lyr-';
 
 /**
- * Lapisan Citra Satelit Cuaca Awan & Asap Geostasioner Himawari-9 (JMA / NASA GIBS).
- * Dilengkapi mesin Dual-Buffer Ping-Pong Crossfading (Buffer A & B)
- * dan Preloading GPU untuk animasi pergerakan awan yang mulus, stabil, dan bebas kedip persis Zoom Earth.
+ * Mesin Animasi Citra Satelit Geostasioner Himawari-9 60 FPS (Zoom Earth Architecture).
+ *
+ * Desain Bebas Kedip (Zero Flicker / Zero Jitter):
+ * 1. Multi-Frame Pool terisolasi: Source dan Layer dibuat sekali dan tetap berada di GPU VRAM.
+ * 2. Decoupled Clock: Loop animasi berjalan independen di rAF 60 FPS tanpa terpengaruh re-render React.
+ * 3. Equal-Energy Cosine Crossfade: Total opasitas frame outgoing + incoming selalu 100% konstan.
  */
 export const SatelliteCloudLayer: React.FC<SatelliteCloudLayerProps> = ({
   map,
   visible = false,
   opacity = 0.85,
   mode = 'auto',
+  frames,
+  currentStepIndex = 0,
   currentTimeIso,
-  nextTimeIso,
+  playing = false,
+  onStepChange,
+  speed = 'medium',
   animationStyle = 'smooth',
-  crossfadeDurationMs = 320,
   onResolvedModeChange,
 }) => {
-  const activeBufferRef = useRef<'a' | 'b'>('a');
-  const activeUrlRef = useRef<string>('');
+  const poolCountRef = useRef<number>(0);
   const rafIdRef = useRef<number | null>(null);
+
   const opacityRef = useRef<number>(opacity);
   opacityRef.current = opacity;
 
+  const modeRef = useRef<SatelliteMode>(mode);
+  modeRef.current = mode;
+
+  const speedRef = useRef<SatelliteAnimationSpeed>(speed);
+  speedRef.current = speed;
+
+  const animStyleRef = useRef<SatelliteAnimationStyle>(animationStyle);
+  animStyleRef.current = animationStyle;
+
+  const currentStepIndexRef = useRef<number>(currentStepIndex);
+  currentStepIndexRef.current = currentStepIndex;
+
+  const onStepChangeRef = useRef(onStepChange);
+  onStepChangeRef.current = onStepChange;
+
+  const onResolvedModeChangeRef = useRef(onResolvedModeChange);
+  onResolvedModeChangeRef.current = onResolvedModeChange;
+
+  const currentFloatRef = useRef<number>(currentStepIndex);
+  const lastEmittedIdxRef = useRef<number>(currentStepIndex);
+  const activePairRef = useRef<[number, number]>([currentStepIndex, currentStepIndex]);
+
   /**
    * Menemukan ID layer pertama yang harus diletakkan DI ATAS lapisan citra satelit
-   * (lapisan PM2.5, garis pantai, label kota, atau titik api karhutla) agar peta selalu terbaca jelas.
+   * (garis pantai, label kota, atau titik api karhutla) agar peta selalu terbaca jelas.
    */
   const getFirstOverlayLayerId = useCallback((): string | undefined => {
     if (!map) return undefined;
     const candidates = [
-      'sekura-lyr-pm25',
       'sekura-lyr-coastline-halo',
       'sekura-lyr-coastline-core',
       'sekura-lyr-city-dots',
@@ -71,297 +102,315 @@ export const SatelliteCloudLayer: React.FC<SatelliteCloudLayerProps> = ({
   }, [map]);
 
   /**
-   * Memastikan kedua source dan layer raster (Buffer A & B) terpasang di MapLibre
+   * 1. Sinkronisasi Multi-Frame Raster Pool di MapLibre GL
+   * Hanya dijalankan saat map, mode citra, visibilitas, atau daftar frame berubah.
+   * DILARANG bergantung pada currentStepIndex atau playing agar tidak pernah re-order layer saat memutar!
    */
-  const ensureBuffersAttached = useCallback(
-    (initialUrl: string) => {
-      if (!map) return;
+  const syncPoolLayers = useCallback(() => {
+    if (!map) return;
 
-      const beforeLayerId = getFirstOverlayLayerId();
+    const activeFrames: { iso: string }[] =
+      frames && frames.length > 0
+        ? frames
+        : [{ iso: clampToLatestHimawariTime(currentTimeIso || Date.now()) }];
 
-      // 1. Buffer A
-      if (!map.getSource(SRC_A)) {
-        map.addSource(SRC_A, {
-          type: 'raster',
-          tiles: [initialUrl],
-          tileSize: 256,
-          minzoom: 1,
-          maxzoom: 6,
-          attribution: 'Imagery &copy; JMA Himawari-9 / NASA GIBS / SekuraLabs',
-        });
+    const count = activeFrames.length;
+    const beforeLayerId = getFirstOverlayLayerId();
+    const safeIdx = Math.min(Math.max(0, currentStepIndexRef.current), count - 1);
+
+    for (let i = 0; i < count; i++) {
+      const frameIso = activeFrames[i].iso;
+      const { url, resolvedMode } = getSatelliteTileUrl(mode, frameIso);
+
+      if (i === safeIdx && onResolvedModeChangeRef.current) {
+        onResolvedModeChangeRef.current(resolvedMode);
       }
 
-      if (!map.getLayer(LYR_A)) {
+      const srcId = `${SRC_PREFIX}${i}`;
+      const lyrId = `${LYR_PREFIX}${i}`;
+
+      // 1. Source Raster
+      let existingSource = map.getSource(srcId) as any;
+      if (!existingSource) {
+        map.addSource(srcId, {
+          type: 'raster',
+          tiles: [url],
+          tileSize: 256,
+          minzoom: 1,
+          maxzoom: 7,
+          attribution: 'Imagery &copy; JMA Himawari-9 / NASA GIBS / SekuraLabs',
+        });
+        existingSource = map.getSource(srcId) as any;
+        if (existingSource) {
+          existingSource._currentUrl = url;
+        }
+      } else if (existingSource._currentUrl !== url) {
+        existingSource._currentUrl = url;
+        if (typeof existingSource.setTiles === 'function') {
+          existingSource.setTiles([url]);
+        }
+      }
+
+      // 2. Layer Raster
+      if (!map.getLayer(lyrId)) {
         map.addLayer(
           {
-            id: LYR_A,
+            id: lyrId,
             type: 'raster',
-            source: SRC_A,
+            source: srcId,
             minzoom: 0,
             maxzoom: 19,
             layout: {
               visibility: visible ? 'visible' : 'none',
             },
             paint: {
-              'raster-opacity': visible && activeBufferRef.current === 'a' ? opacity : 0,
-              'raster-fade-duration': 0, // Dikelola manual via rAF crossfade
+              'raster-opacity': visible && i === safeIdx ? opacityRef.current : 0,
+              'raster-fade-duration': 0, // Gunakan kendali GPU crossfade murni tanpa delay internal
+              'raster-contrast': 0.1, // Pertajam kontras gumpalan awan dan sebaran asap
+              'raster-saturation': 0.05,
             },
           },
           beforeLayerId,
         );
       } else {
-        if (beforeLayerId) {
-          try {
-            map.moveLayer(LYR_A, beforeLayerId);
-          } catch {}
-        }
+        map.setLayoutProperty(lyrId, 'visibility', visible ? 'visible' : 'none');
       }
+    }
 
-      // 2. Buffer B
-      if (!map.getSource(SRC_B)) {
-        map.addSource(SRC_B, {
-          type: 'raster',
-          tiles: [initialUrl],
-          tileSize: 256,
-          minzoom: 1,
-          maxzoom: 6,
-          attribution: 'Imagery &copy; JMA Himawari-9 / NASA GIBS / SekuraLabs',
+    // Bersihkan surplus layer jika rentang durasi diperpendek
+    const prevCount = poolCountRef.current;
+    if (prevCount > count) {
+      for (let i = count; i < prevCount; i++) {
+        const srcId = `${SRC_PREFIX}${i}`;
+        const lyrId = `${LYR_PREFIX}${i}`;
+        try {
+          if (map.getLayer(lyrId)) map.removeLayer(lyrId);
+          if (map.getSource(srcId)) map.removeSource(srcId);
+        } catch {}
+      }
+    }
+
+    poolCountRef.current = count;
+
+    // Background preloader: panaskan cache ubin kawasan Indonesia untuk zoom 4
+    if (visible && activeFrames.length > 1) {
+      setTimeout(() => {
+        const sampleTiles = [
+          { z: 4, x: 12, y: 8 },
+          { z: 4, x: 13, y: 8 },
+          { z: 4, x: 14, y: 8 },
+          { z: 4, x: 15, y: 8 },
+          { z: 4, x: 13, y: 9 },
+        ];
+        activeFrames.forEach((frame) => {
+          const { url } = getSatelliteTileUrl(mode, frame.iso);
+          sampleTiles.forEach((tile) => {
+            const tileUrl = url
+              .replace('{z}', String(tile.z))
+              .replace('{x}', String(tile.x))
+              .replace('{y}', String(tile.y));
+            const img = new Image();
+            img.src = tileUrl;
+          });
         });
+      }, 100);
+    }
+  }, [map, visible, mode, frames, getFirstOverlayLayerId]);
+
+  // Sinkronisasi pool saat struktur peta atau daftar frame berubah
+  useEffect(() => {
+    syncPoolLayers();
+  }, [syncPoolLayers]);
+
+  /**
+   * 2. Kontrol Posisi Frame Saat Mode Diam / Scrubbing (Paused)
+   * Efek ini HANYA aktif saat playing === false.
+   * Saat playing === true, efek ini sama sekali TIDAK menyentuh opasitas layer!
+   */
+  useEffect(() => {
+    if (!map || !visible || playing) return;
+
+    const count = frames && frames.length > 0 ? frames.length : poolCountRef.current || 1;
+    const safeIdx = Math.min(Math.max(0, currentStepIndex), count - 1);
+    currentFloatRef.current = safeIdx;
+    lastEmittedIdxRef.current = safeIdx;
+    activePairRef.current = [safeIdx, safeIdx];
+
+    for (let i = 0; i < count; i++) {
+      const lyrId = `${LYR_PREFIX}${i}`;
+      if (map.getLayer(lyrId)) {
+        map.setLayoutProperty(lyrId, 'visibility', 'visible');
+        map.setPaintProperty(lyrId, 'raster-opacity', i === safeIdx ? opacityRef.current : 0);
       }
+    }
+  }, [map, visible, playing, currentStepIndex, frames]);
 
-      if (!map.getLayer(LYR_B)) {
-        map.addLayer(
-          {
-            id: LYR_B,
-            type: 'raster',
-            source: SRC_B,
-            minzoom: 0,
-            maxzoom: 19,
-            layout: {
-              visibility: visible ? 'visible' : 'none',
-            },
-            paint: {
-              'raster-opacity': visible && activeBufferRef.current === 'b' ? opacity : 0,
-              'raster-fade-duration': 0,
-            },
-          },
-          beforeLayerId,
-        );
-      } else {
-        if (beforeLayerId) {
-          try {
-            map.moveLayer(LYR_B, beforeLayerId);
-          } catch {}
-        }
-      }
-    },
-    [map, visible, opacity, getFirstOverlayLayerId],
-  );
-
-  // Fungsi transisi halus (Crossfade rAF) antar dua buffer
-  const triggerTransition = useCallback(
-    (newUrl: string, nextPreloadUrl?: string) => {
-      if (!map) return;
-
-      const currentActive = activeBufferRef.current;
-      const incomingBuffer = currentActive === 'a' ? 'b' : 'a';
-
-      const incomingLyr = incomingBuffer === 'a' ? LYR_A : LYR_B;
-      const outgoingLyr = currentActive === 'a' ? LYR_A : LYR_B;
-      const incomingSrc = incomingBuffer === 'a' ? SRC_A : SRC_B;
-      const outgoingSrc = currentActive === 'a' ? SRC_A : SRC_B;
-
-      // Batalkan rAF sebelumnya jika ada transisi tertunda
+  /**
+   * 3. Mesin Pemutaran Animasi Kontinyu 60 FPS (Zoom Earth Style)
+   * Loop ini berjalan TANPA TERPUTUS saat playing === true.
+   * DILARANG memasukkan currentStepIndex ke dependency array agar loop tidak di-cancel setiap tick!
+   */
+  useEffect(() => {
+    if (!map || !visible || !playing) {
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
+      return;
+    }
 
-      // Muat URL baru pada buffer target
-      const targetSource = map.getSource(incomingSrc) as any;
-      if (targetSource && typeof targetSource.setTiles === 'function') {
-        targetSource.setTiles([newUrl]);
+    const count = frames && frames.length > 0 ? frames.length : poolCountRef.current || 1;
+    if (count <= 1) return;
+
+    let lastTime = performance.now();
+    let currentFloat = isNaN(currentFloatRef.current)
+      ? currentStepIndexRef.current
+      : currentFloatRef.current;
+
+    // Pastikan semua layer visible
+    for (let i = 0; i < count; i++) {
+      const lyrId = `${LYR_PREFIX}${i}`;
+      if (map.getLayer(lyrId)) {
+        map.setLayoutProperty(lyrId, 'visibility', 'visible');
       }
+    }
 
-      // Pastikan kedua layer berstatus visible
-      if (map.getLayer(incomingLyr)) {
-        map.setLayoutProperty(incomingLyr, 'visibility', 'visible');
-      }
-      if (map.getLayer(outgoingLyr)) {
-        map.setLayoutProperty(outgoingLyr, 'visibility', 'visible');
-      }
+    const animateLoop = (now: number) => {
+      if (!map) return;
+      const deltaMs = now - lastTime;
+      lastTime = now;
 
-      // Jika mode cepat (fast) dipilih pengguna, langsung alihkan tanpa crossfade
-      if (animationStyle === 'fast') {
-        map.setPaintProperty(incomingLyr, 'raster-opacity', opacityRef.current);
-        map.setPaintProperty(outgoingLyr, 'raster-opacity', 0);
-        activeBufferRef.current = incomingBuffer;
-        activeUrlRef.current = newUrl;
-        return;
-      }
+      const speedConfig = SATELLITE_SPEED_CONFIGS[speedRef.current] || SATELLITE_SPEED_CONFIGS.medium;
+      const stepMs = Math.max(200, speedConfig.stepMs);
 
-      // Mode Mulus (Smooth): Jalankan interpolasi crossfade matematis 60 FPS
-      const startTime = performance.now();
-      const duration = Math.max(80, crossfadeDurationMs);
+      // Tingkatkan float progress secara kontinyu tanpa jeda
+      currentFloat = (currentFloat + deltaMs / stepMs) % count;
+      if (isNaN(currentFloat)) currentFloat = 0;
+      currentFloatRef.current = currentFloat;
 
-      const step = (now: number) => {
-        if (!map) return;
-        const elapsed = now - startTime;
-        const progress = Math.min(1, Math.max(0, elapsed / duration));
+      const idxA = Math.floor(currentFloat);
+      const idxB = (idxA + 1) % count;
+      const fraction = currentFloat - idxA;
 
-        // Kurva easing kuadratik (easeInOutQuad) untuk transisi alami
-        const ease =
-          progress < 0.5
-            ? 2 * progress * progress
-            : -1 + (4 - 2 * progress) * progress;
+      const lyrA = `${LYR_PREFIX}${idxA}`;
+      const lyrB = `${LYR_PREFIX}${idxB}`;
 
-        const inOpacity = ease * opacityRef.current;
-        const outOpacity = Math.max(0, (1 - ease) * opacityRef.current);
+      const targetOp = opacityRef.current;
+
+      if (animStyleRef.current === 'smooth') {
+        // Equal-Alpha Over Crossfade:
+        // Transisi kurva halus di mana layer atas blend-in mulus sementara layer bawah mempertahankan
+        // opasitas penuh. Menghilangkan 100% dip penurunan cahaya / kedipan ke basemap (zero flicker).
+        const blend = 0.5 - 0.5 * Math.cos(Math.PI * fraction);
+
+        let opA: number;
+        let opB: number;
+
+        if (idxB > idxA) {
+          // Playback sekuensial normal: Layer B berada di atas Layer A
+          opB = blend * targetOp;
+          opA = targetOp;
+        } else {
+          // Wrap-around dari frame terakhir (17) kembali ke frame awal (0):
+          // Layer A (17) berada di atas Layer B (0)
+          opA = (1 - blend) * targetOp;
+          opB = targetOp;
+        }
 
         try {
-          if (map.getLayer(incomingLyr)) {
-            map.setPaintProperty(incomingLyr, 'raster-opacity', inOpacity);
+          if (map.getLayer(lyrA)) map.setPaintProperty(lyrA, 'raster-opacity', opA);
+          if (map.getLayer(lyrB)) map.setPaintProperty(lyrB, 'raster-opacity', opB);
+
+          // Padamkan layer lain yang tidak sedang aktif
+          const [prevA, prevB] = activePairRef.current;
+          if (prevA !== idxA && prevA !== idxB) {
+            const prevLyr = `${LYR_PREFIX}${prevA}`;
+            if (map.getLayer(prevLyr)) map.setPaintProperty(prevLyr, 'raster-opacity', 0);
           }
-          if (map.getLayer(outgoingLyr)) {
-            map.setPaintProperty(outgoingLyr, 'raster-opacity', outOpacity);
+          if (prevB !== idxA && prevB !== idxB) {
+            const prevLyr = `${LYR_PREFIX}${prevB}`;
+            if (map.getLayer(prevLyr)) map.setPaintProperty(prevLyr, 'raster-opacity', 0);
           }
+          activePairRef.current = [idxA, idxB];
         } catch {}
-
-        if (progress < 1) {
-          rafIdRef.current = requestAnimationFrame(step);
-        } else {
-          // Transisi selesai, update status buffer aktif
-          rafIdRef.current = null;
-          activeBufferRef.current = incomingBuffer;
-          activeUrlRef.current = newUrl;
-
-          try {
-            if (map.getLayer(incomingLyr)) {
-              map.setPaintProperty(incomingLyr, 'raster-opacity', opacityRef.current);
-            }
-            if (map.getLayer(outgoingLyr)) {
-              map.setPaintProperty(outgoingLyr, 'raster-opacity', 0);
-            }
-          } catch {}
-
-          // PRELOAD FRAME BERIKUTNYA DI BUFFER IDLE:
-          // Begitu buffer target mencapai 100%, buffer idle langsung diarahkan ke frame selanjutnya
-          // sehingga ubin sudah diunduh & di-decode oleh GPU sebelum frame berikutnya diputar!
-          if (nextPreloadUrl && map.getSource(outgoingSrc)) {
-            const idleSource = map.getSource(outgoingSrc) as any;
-            if (idleSource && typeof idleSource.setTiles === 'function') {
-              idleSource.setTiles([nextPreloadUrl]);
-            }
+      } else {
+        // Mode Fast: Langkah diskrit instan
+        try {
+          if (map.getLayer(lyrA)) map.setPaintProperty(lyrA, 'raster-opacity', targetOp);
+          const [prevA] = activePairRef.current;
+          if (prevA !== idxA) {
+            const prevLyr = `${LYR_PREFIX}${prevA}`;
+            if (map.getLayer(prevLyr)) map.setPaintProperty(prevLyr, 'raster-opacity', 0);
           }
+          activePairRef.current = [idxA, idxA];
+        } catch {}
+      }
+
+      // Kirim pembaruan ke linimasa UI saat melintasi batas frame
+      if (idxA !== lastEmittedIdxRef.current) {
+        lastEmittedIdxRef.current = idxA;
+        if (onStepChangeRef.current) {
+          onStepChangeRef.current(idxA);
         }
-      };
+        if (onResolvedModeChangeRef.current && frames?.[idxA]) {
+          const { resolvedMode } = getSatelliteTileUrl(modeRef.current, frames[idxA].iso);
+          onResolvedModeChangeRef.current(resolvedMode);
+        }
+      }
 
-      rafIdRef.current = requestAnimationFrame(step);
-    },
-    [map, animationStyle, crossfadeDurationMs],
-  );
+      rafIdRef.current = requestAnimationFrame(animateLoop);
+    };
 
-  // Sinkronisasi frame saat waktu berubah atau visibilitas diaktifkan
+    rafIdRef.current = requestAnimationFrame(animateLoop);
+
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, [map, visible, playing, frames]);
+
+  // Update opasitas reaktif saat slider opasitas digeser pengguna
   useEffect(() => {
     if (!map) return;
-
-    if (!visible) {
-      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
-      if (map.getLayer(LYR_A)) map.setLayoutProperty(LYR_A, 'visibility', 'none');
-      if (map.getLayer(LYR_B)) map.setLayoutProperty(LYR_B, 'visibility', 'none');
-      return;
-    }
-
-    const clampedIso = clampToLatestHimawariTime(currentTimeIso || Date.now());
-    const { url, resolvedMode } = getSatelliteTileUrl(mode, clampedIso);
-
-    if (onResolvedModeChange) {
-      onResolvedModeChange(resolvedMode);
-    }
-
-    // Hitung URL preload untuk frame selanjutnya jika tersedia
-    let nextPreloadUrl: string | undefined;
-    if (nextTimeIso) {
-      const nextClamped = clampToLatestHimawariTime(nextTimeIso);
-      const resNext = getSatelliteTileUrl(mode, nextClamped);
-      nextPreloadUrl = resNext.url;
-    }
-
-    // Pastikan buffer terpasang jika belum ada
-    if (!map.getLayer(LYR_A) || !map.getLayer(LYR_B)) {
-      activeUrlRef.current = url;
-      ensureBuffersAttached(url);
-      return;
-    }
-
-    if (url !== activeUrlRef.current) {
-      triggerTransition(url, nextPreloadUrl);
-    } else {
-      // Pastikan buffer aktif tetap terlihat
-      const activeLyr = activeBufferRef.current === 'a' ? LYR_A : LYR_B;
-      const inactiveLyr = activeBufferRef.current === 'a' ? LYR_B : LYR_A;
-
-      if (map.getLayer(activeLyr)) {
-        map.setLayoutProperty(activeLyr, 'visibility', 'visible');
-        map.setPaintProperty(activeLyr, 'raster-opacity', opacity);
-      }
-      if (map.getLayer(inactiveLyr)) {
-        map.setPaintProperty(inactiveLyr, 'raster-opacity', 0);
+    opacityRef.current = opacity;
+    if (!playing) {
+      const count = frames && frames.length > 0 ? frames.length : poolCountRef.current || 1;
+      const safeIdx = Math.min(Math.max(0, currentStepIndexRef.current), count - 1);
+      const currentActiveLyr = `${LYR_PREFIX}${safeIdx}`;
+      if (map.getLayer(currentActiveLyr)) {
+        map.setPaintProperty(currentActiveLyr, 'raster-opacity', visible ? opacity : 0);
       }
     }
-  }, [
-    map,
-    visible,
-    mode,
-    currentTimeIso,
-    nextTimeIso,
-    ensureBuffersAttached,
-    triggerTransition,
-    onResolvedModeChange,
-    opacity,
-  ]);
+  }, [map, visible, opacity, playing, frames]);
 
   // Handle pergantian gaya peta dasar (style.load saat user ganti basemap)
   useEffect(() => {
     if (!map) return;
     const handleStyleLoad = () => {
-      activeUrlRef.current = '';
-      if (visible) {
-        const clampedIso = clampToLatestHimawariTime(currentTimeIso || Date.now());
-        const { url, resolvedMode } = getSatelliteTileUrl(mode, clampedIso);
-        if (onResolvedModeChange) {
-          onResolvedModeChange(resolvedMode);
-        }
-        activeUrlRef.current = url;
-        ensureBuffersAttached(url);
-      }
+      syncPoolLayers();
     };
     map.on('style.load', handleStyleLoad);
     return () => {
       map.off('style.load', handleStyleLoad);
     };
-  }, [map, visible, mode, currentTimeIso, ensureBuffersAttached, onResolvedModeChange]);
-
-  // Update opasitas reaktif saat slider digeser
-  useEffect(() => {
-    if (!map) return;
-    const activeLyr = activeBufferRef.current === 'a' ? LYR_A : LYR_B;
-    if (map.getLayer(activeLyr)) {
-      map.setPaintProperty(activeLyr, 'raster-opacity', visible ? opacity : 0);
-    }
-  }, [map, visible, opacity]);
+  }, [map, syncPoolLayers]);
 
   // Pembersihan saat komponen unmount
   useEffect(() => {
     return () => {
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
       if (!map) return;
-      try {
-        if (map.getLayer(LYR_A)) map.removeLayer(LYR_A);
-        if (map.getSource(SRC_A)) map.removeSource(SRC_A);
-        if (map.getLayer(LYR_B)) map.removeLayer(LYR_B);
-        if (map.getSource(SRC_B)) map.removeSource(SRC_B);
-      } catch {}
+      const count = poolCountRef.current;
+      for (let i = 0; i < count; i++) {
+        const srcId = `${SRC_PREFIX}${i}`;
+        const lyrId = `${LYR_PREFIX}${i}`;
+        try {
+          if (map.getLayer(lyrId)) map.removeLayer(lyrId);
+          if (map.getSource(srcId)) map.removeSource(srcId);
+        } catch {}
+      }
     };
   }, [map]);
 

@@ -89,7 +89,6 @@ export function isDaytimeInIndonesia(date: Date): boolean {
 export function clampToLatestHimawariTime(inputDateOrMs: Date | number | string): string {
   let targetMs: number;
   if (typeof inputDateOrMs === 'string') {
-    // Normalisasi string seperti "2026-10-14 02:00" atau ISO
     const cleanStr = inputDateOrMs.replace(' ', 'T');
     targetMs = Date.parse(cleanStr.endsWith('Z') ? cleanStr : `${cleanStr}:00Z`);
   } else if (typeof inputDateOrMs === 'number') {
@@ -99,8 +98,8 @@ export function clampToLatestHimawariTime(inputDateOrMs: Date | number | string)
   }
 
   const nowMs = Date.now();
-  // Batas maksimum ke waktu nyata: mundur 20 menit dari sekarang
-  const maxSafeMs = nowMs - 20 * 60 * 1000;
+  // Batas aman ~25 menit agar ubin GeoColor Himawari-9 selesai diproses & stabil di CDN
+  const maxSafeMs = nowMs - 25 * 60 * 1000;
   if (targetMs > maxSafeMs || isNaN(targetMs)) {
     targetMs = maxSafeMs;
   }
@@ -113,7 +112,7 @@ export function clampToLatestHimawariTime(inputDateOrMs: Date | number | string)
 }
 
 /**
- * Menghasilkan URL template ubin raster WMTS NASA GIBS untuk MapLibre GL JS
+ * Menghasilkan URL template ubin raster WMTS NASA GIBS / Zoom Earth GeoColor untuk MapLibre GL JS
  */
 export function getSatelliteTileUrl(mode: SatelliteMode, timestampIso: string): {
   url: string;
@@ -123,12 +122,27 @@ export function getSatelliteTileUrl(mode: SatelliteMode, timestampIso: string): 
   const date = new Date(timestampIso);
   let resolvedMode: Exclude<SatelliteMode, 'auto'>;
 
-  if (mode === 'auto') {
+  if (mode === 'auto' || mode === 'visible') {
     resolvedMode = isDaytimeInIndonesia(date) ? 'visible' : 'infrared';
-  } else {
-    resolvedMode = mode;
+    // Gunakan GeoColor definisi tinggi langsung dari feed satelit Zoom Earth / JMA Himawari
+    const ymd = date.toISOString().slice(0, 10);
+    const m = Math.floor(date.getUTCMinutes() / 10) * 10;
+    const hhmm = String(date.getUTCHours()).padStart(2, '0') + String(m).padStart(2, '0');
+    const url = `/zoom-tiles/geocolor/himawari/${ymd}/${hhmm}/{z}/{y}/{x}.jpg`;
+    return {
+      url,
+      config: {
+        layerIdentifier: 'Himawari_GeoColor',
+        tileMatrixSet: 'GoogleMapsCompatible_Level7',
+        format: 'jpg',
+        minZoom: 1,
+        maxZoom: 7,
+      },
+      resolvedMode,
+    };
   }
 
+  resolvedMode = mode;
   const config = LAYER_CONFIGS[resolvedMode];
   const url = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${config.layerIdentifier}/default/${timestampIso}/${config.tileMatrixSet}/{z}/{y}/{x}.${config.format}`;
 
@@ -143,16 +157,16 @@ export const SATELLITE_SPEED_CONFIGS: Record<
   SatelliteAnimationSpeed,
   { label: string; stepMs: number; crossfadeMs: number }
 > = {
-  slow: { label: 'Lambat', stepMs: 1350, crossfadeMs: 500 },
-  medium: { label: 'Sedang', stepMs: 750, crossfadeMs: 320 },
-  fast: { label: 'Cepat', stepMs: 380, crossfadeMs: 160 },
+  slow: { label: 'Lambat', stepMs: 1200, crossfadeMs: 1200 },
+  medium: { label: 'Sedang', stepMs: 700, crossfadeMs: 700 },
+  fast: { label: 'Cepat', stepMs: 400, crossfadeMs: 400 },
 };
 
 export const SATELLITE_DURATIONS: { hours: SatelliteLoopDuration; label: string; framesCount: number }[] = [
   { hours: 3, label: '3 Jam', framesCount: 18 },
-  { hours: 6, label: '6 Jam', framesCount: 36 },
-  { hours: 12, label: '12 Jam', framesCount: 48 },
-  { hours: 24, label: '24 Jam', framesCount: 48 },
+  { hours: 6, label: '6 Jam', framesCount: 18 },
+  { hours: 12, label: '12 Jam', framesCount: 24 },
+  { hours: 24, label: '24 Jam', framesCount: 24 },
 ];
 
 export interface SatelliteLoopFrame {
@@ -168,14 +182,14 @@ const MONTH_NAMES_ID = [
 ];
 
 /**
- * Menghasilkan daftar frame interval 10-30 menit untuk mode Animasi Loop Satelit ala Zoom Earth
+ * Menghasilkan daftar frame interval kelipatan 10 menit untuk mode Animasi Loop Satelit ala Zoom Earth
  * @param hours Rentang durasi loop (3, 6, 12, atau 24 jam)
  */
 export function generateSatelliteLoopFrames(hours: SatelliteLoopDuration = 3): SatelliteLoopFrame[] {
   const frames: SatelliteLoopFrame[] = [];
-  const now = new Date();
+  const nowMs = Date.now();
 
-  // Tentukan interval menit dan jumlah frame berdasarkan durasi yang dipilih
+  // Tentukan interval menit dan jumlah frame (wajib kelipatan 10 menit sesuai scan Himawari-9)
   let intervalMinutes = 10;
   let count = 18;
 
@@ -183,22 +197,24 @@ export function generateSatelliteLoopFrames(hours: SatelliteLoopDuration = 3): S
     intervalMinutes = 10;
     count = 18;
   } else if (hours === 6) {
-    intervalMinutes = 10;
-    count = 36;
+    intervalMinutes = 20; // 18 frames * 20 min = 360 min = 6 jam
+    count = 18;
   } else if (hours === 12) {
-    intervalMinutes = 15;
-    count = 48;
+    intervalMinutes = 30; // 24 frames * 30 min = 720 min = 12 jam
+    count = 24;
   } else if (hours === 24) {
-    intervalMinutes = 30;
-    count = 48;
+    intervalMinutes = 60; // 24 frames * 60 min = 1440 min = 24 jam
+    count = 24;
   }
 
-  // Scan terbaru yang sudah stabil di NASA GIBS (~25 menit sebelum sekarang)
+  // Scan terbaru yang sudah stabil di CDN (~25 menit sebelum sekarang)
+  // Wajib dibulatkan ke interval 10 menit scan Himawari
+  const safeDelayMs = 25 * 60 * 1000;
+  const base10Ms = Math.floor((nowMs - safeDelayMs) / (10 * 60 * 1000)) * (10 * 60 * 1000);
   const intervalMs = intervalMinutes * 60 * 1000;
-  const latestScanMs = Math.floor((now.getTime() - 25 * 60 * 1000) / intervalMs) * intervalMs;
 
   for (let i = count - 1; i >= 0; i--) {
-    const frameMs = latestScanMs - (i * intervalMs);
+    const frameMs = base10Ms - (i * intervalMs);
     const d = new Date(frameMs);
     const iso = d.toISOString().slice(0, 19) + 'Z';
 

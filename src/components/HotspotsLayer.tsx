@@ -49,21 +49,21 @@ export const HotspotsLayer: React.FC<HotspotsLayerProps> = ({
             'interpolate',
             ['linear'],
             ['get', 'frp'],
-            1, '#f97316',
-            15, '#ea580c',
+            1, '#ff6a00',
+            15, '#ff3700',
             50, '#dc2626',
           ],
           'circle-radius': [
             'interpolate',
             ['linear'],
             ['zoom'],
-            3, 3.2,
-            6, 5.5,
-            10, 9.0,
-            14, 16.0,
+            3, 5.0,
+            6, 7.5,
+            10, 12.0,
+            14, 18.0,
           ],
-          'circle-blur': 0.75,
-          'circle-opacity': 0.65,
+          'circle-blur': 0.5,
+          'circle-opacity': 0.85,
         },
       });
     }
@@ -80,39 +80,37 @@ export const HotspotsLayer: React.FC<HotspotsLayerProps> = ({
             'interpolate',
             ['linear'],
             ['get', 'frp'],
-            1, '#f59e0b',
-            10, '#ea580c',
-            40, '#dc2626',
+            1, '#fbbf24',
+            10, '#f97316',
+            40, '#ef4444',
             100, '#b91c1c',
           ],
           'circle-radius': [
             'interpolate',
             ['linear'],
             ['zoom'],
-            3, 1.8,
-            6, 3.0,
-            10, 4.8,
-            14, 7.5,
+            3, 2.8,
+            6, 4.2,
+            10, 6.2,
+            14, 9.0,
           ],
           'circle-stroke-width': [
             'interpolate',
             ['linear'],
             ['zoom'],
-            3, 0.6,
-            7, 1.1,
-            12, 1.6,
+            3, 1.0,
+            7, 1.4,
+            12, 2.0,
           ],
           'circle-stroke-color': '#ffffff',
-          'circle-opacity': 0.95,
+          'circle-opacity': 1.0,
         },
       });
     }
 
-    // Pastikan jika layer PM2.5 ada, titik api hotspot selalu berada di atas layer asap PM2.5
-    if (map.getLayer('sekura-lyr-pm25')) {
-      if (map.getLayer(LYR_EMBER_HALO)) map.moveLayer(LYR_EMBER_HALO);
-      if (map.getLayer(LYR_EMBER_CORE)) map.moveLayer(LYR_EMBER_CORE);
-    }
+    // Pastikan titik api hotspot selalu berada di paling atas melampaui semua lapisan raster (PM2.5, Satelit Himawari A & B, Basemap Satelit Esri)
+    if (map.getLayer(LYR_EMBER_HALO)) map.moveLayer(LYR_EMBER_HALO);
+    if (map.getLayer(LYR_EMBER_CORE)) map.moveLayer(LYR_EMBER_CORE);
 
     // Pasang click & hover handlers sekali saja
     if (!clickListenersAttachedRef.current) {
@@ -236,6 +234,11 @@ export const HotspotsLayer: React.FC<HotspotsLayerProps> = ({
         map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
       }
     });
+
+    if (visible) {
+      if (map.getLayer(LYR_EMBER_HALO)) map.moveLayer(LYR_EMBER_HALO);
+      if (map.getLayer(LYR_EMBER_CORE)) map.moveLayer(LYR_EMBER_CORE);
+    }
 
     if (!visible && popupRef.current) {
       popupRef.current.remove();

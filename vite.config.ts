@@ -7,7 +7,24 @@ export default defineConfig({
   server: {
     port: 3000,
     open: false,
-    host: true
+    host: true,
+    proxy: {
+      '/zoom-tiles': {
+        target: 'https://tiles.zoom.earth',
+        changeOrigin: true,
+        headers: {
+          Referer: 'https://zoom.earth/',
+          Origin: 'https://zoom.earth',
+        },
+        rewrite: (path) => path.replace(/^\/zoom-tiles/, ''),
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            proxyRes.headers['access-control-allow-origin'] = '*';
+            delete proxyRes.headers['content-security-policy'];
+          });
+        },
+      },
+    },
   },
   build: {
     target: 'esnext',
