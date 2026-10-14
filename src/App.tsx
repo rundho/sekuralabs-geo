@@ -21,7 +21,11 @@ import { CityLabelsLayer } from './components/CityLabelsLayer';
 import { SatelliteCloudLayer } from './components/SatelliteCloudLayer';
 import {
   type SatelliteMode,
+  type SatelliteAnimationSpeed,
+  type SatelliteLoopDuration,
+  type SatelliteAnimationStyle,
   type SatelliteLoopFrame,
+  SATELLITE_SPEED_CONFIGS,
   generateSatelliteLoopFrames,
 } from './core/satellite';
 
@@ -43,13 +47,16 @@ export const App: React.FC = () => {
   const [hotspotsVisible, setHotspotsVisible] = useState(false);
   const [hotspotsCount, setHotspotsCount] = useState(0);
 
-  // Satellite Himawari-9 layer settings
+  // Satellite Himawari-9 layer settings (ala Zoom Earth)
   const [satelliteVisible, setSatelliteVisible] = useState(false);
   const [satelliteOpacity, setSatelliteOpacity] = useState(0.85);
   const [satelliteMode, setSatelliteMode] = useState<SatelliteMode>('auto');
   const [satelliteLoopActive, setSatelliteLoopActive] = useState(false);
+  const [satelliteSpeed, setSatelliteSpeed] = useState<SatelliteAnimationSpeed>('medium');
+  const [satelliteDuration, setSatelliteDuration] = useState<SatelliteLoopDuration>(3);
+  const [satelliteStyle, setSatelliteStyle] = useState<SatelliteAnimationStyle>('smooth');
   const [satelliteFrames, setSatelliteFrames] = useState<SatelliteLoopFrame[]>(() =>
-    generateSatelliteLoopFrames(18),
+    generateSatelliteLoopFrames(3),
   );
   const [satelliteStepIndex, setSatelliteStepIndex] = useState(17);
   const [, setResolvedSatelliteMode] = useState<'visible' | 'infrared' | 'airmass'>('infrared');
@@ -121,7 +128,16 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Playback timer loop (mendukung per jam CAMS maupun loop 10-menit Himawari)
+  // Handler perubahan rentang durasi loop satelit (3, 6, 12, 24 jam)
+  const handleSatelliteDurationChange = useCallback((dur: SatelliteLoopDuration) => {
+    setSatelliteDuration(dur);
+    const newFrames = generateSatelliteLoopFrames(dur);
+    setSatelliteFrames(newFrames);
+    setSatelliteStepIndex(newFrames.length - 1);
+    setPlaying(false);
+  }, []);
+
+  // Playback timer loop (mendukung per jam CAMS maupun loop Himawari dengan kontrol kecepatan)
   useEffect(() => {
     if (!playing) {
       if (playTimerRef.current) clearInterval(playTimerRef.current);
@@ -130,9 +146,10 @@ export const App: React.FC = () => {
 
     if (satelliteLoopActive) {
       if (satelliteFrames.length === 0) return;
+      const speedMs = SATELLITE_SPEED_CONFIGS[satelliteSpeed]?.stepMs || 750;
       playTimerRef.current = window.setInterval(() => {
         setSatelliteStepIndex((prev) => (prev + 1) % satelliteFrames.length);
-      }, 850);
+      }, speedMs);
     } else {
       if (!index || index.times.length === 0) return;
       playTimerRef.current = window.setInterval(() => {
@@ -143,7 +160,7 @@ export const App: React.FC = () => {
     return () => {
       if (playTimerRef.current) clearInterval(playTimerRef.current);
     };
-  }, [playing, satelliteLoopActive, satelliteFrames, index]);
+  }, [playing, satelliteLoopActive, satelliteFrames, satelliteSpeed, index]);
 
   // Sinkronisasi data kartu stasiun yang sedang terbuka saat grid CAMS berganti jam
   useEffect(() => {
@@ -270,7 +287,7 @@ export const App: React.FC = () => {
         {/* Lapisan Garis Pantai & Kontur Pulau Nusantara (High-contrast island boundaries) */}
         <CoastlineLayer map={map} visible={showLabels} />
 
-        {/* Lapisan Citra Satelit Awan & Asap Geostasioner Himawari-9 (NASA GIBS) */}
+        {/* Lapisan Citra Satelit Awan & Asap Geostasioner Himawari-9 (NASA GIBS) dengan Dual-Buffer Crossfader */}
         <SatelliteCloudLayer
           map={map}
           visible={satelliteVisible}
@@ -281,6 +298,13 @@ export const App: React.FC = () => {
               ? satelliteFrames[satelliteStepIndex]?.iso
               : index?.times[currentStepIndex]
           }
+          nextTimeIso={
+            satelliteLoopActive
+              ? satelliteFrames[(satelliteStepIndex + 1) % satelliteFrames.length]?.iso
+              : undefined
+          }
+          animationStyle={satelliteStyle}
+          crossfadeDurationMs={SATELLITE_SPEED_CONFIGS[satelliteSpeed].crossfadeMs}
           onResolvedModeChange={setResolvedSatelliteMode}
         />
 
@@ -331,13 +355,20 @@ export const App: React.FC = () => {
         satelliteLoopActive={satelliteLoopActive}
         onToggleSatelliteLoop={(active) => {
           if (active) {
-            setSatelliteFrames(generateSatelliteLoopFrames(18));
-            setSatelliteStepIndex(17);
+            const newFrames = generateSatelliteLoopFrames(satelliteDuration);
+            setSatelliteFrames(newFrames);
+            setSatelliteStepIndex(newFrames.length - 1);
             setSatelliteVisible(true);
           }
           setSatelliteLoopActive(active);
           setPlaying(false);
         }}
+        satelliteSpeed={satelliteSpeed}
+        onSatelliteSpeedChange={setSatelliteSpeed}
+        satelliteDuration={satelliteDuration}
+        onSatelliteDurationChange={handleSatelliteDurationChange}
+        satelliteStyle={satelliteStyle}
+        onSatelliteStyleChange={setSatelliteStyle}
       />
 
       {/* Right Quick Controls (Zoom, Geolocation, Layer Toggle) */}
@@ -381,6 +412,12 @@ export const App: React.FC = () => {
           onJumpToLive={handleJumpToLive}
           modelLabel={satelliteLoopActive ? 'Himawari-9 10m' : 'CAMS 0.4°'}
           isSatelliteLoop={satelliteLoopActive}
+          satelliteSpeed={satelliteSpeed}
+          onSatelliteSpeedChange={setSatelliteSpeed}
+          satelliteDuration={satelliteDuration}
+          onSatelliteDurationChange={handleSatelliteDurationChange}
+          satelliteStyle={satelliteStyle}
+          onSatelliteStyleChange={setSatelliteStyle}
         />
       )}
 

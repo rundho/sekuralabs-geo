@@ -135,6 +135,26 @@ export function getSatelliteTileUrl(mode: SatelliteMode, timestampIso: string): 
   return { url, config, resolvedMode };
 }
 
+export type SatelliteAnimationSpeed = 'slow' | 'medium' | 'fast';
+export type SatelliteLoopDuration = 3 | 6 | 12 | 24;
+export type SatelliteAnimationStyle = 'fast' | 'smooth';
+
+export const SATELLITE_SPEED_CONFIGS: Record<
+  SatelliteAnimationSpeed,
+  { label: string; stepMs: number; crossfadeMs: number }
+> = {
+  slow: { label: 'Lambat', stepMs: 1350, crossfadeMs: 500 },
+  medium: { label: 'Sedang', stepMs: 750, crossfadeMs: 320 },
+  fast: { label: 'Cepat', stepMs: 380, crossfadeMs: 160 },
+};
+
+export const SATELLITE_DURATIONS: { hours: SatelliteLoopDuration; label: string; framesCount: number }[] = [
+  { hours: 3, label: '3 Jam', framesCount: 18 },
+  { hours: 6, label: '6 Jam', framesCount: 36 },
+  { hours: 12, label: '12 Jam', framesCount: 48 },
+  { hours: 24, label: '24 Jam', framesCount: 48 },
+];
+
 export interface SatelliteLoopFrame {
   iso: string;
   timeFormatted: string;
@@ -148,16 +168,37 @@ const MONTH_NAMES_ID = [
 ];
 
 /**
- * Menghasilkan daftar 18 frame interval 10-menit (3 jam terakhir) untuk mode Animasi Cepat Zoom Earth
+ * Menghasilkan daftar frame interval 10-30 menit untuk mode Animasi Loop Satelit ala Zoom Earth
+ * @param hours Rentang durasi loop (3, 6, 12, atau 24 jam)
  */
-export function generateSatelliteLoopFrames(count = 18): SatelliteLoopFrame[] {
+export function generateSatelliteLoopFrames(hours: SatelliteLoopDuration = 3): SatelliteLoopFrame[] {
   const frames: SatelliteLoopFrame[] = [];
   const now = new Date();
+
+  // Tentukan interval menit dan jumlah frame berdasarkan durasi yang dipilih
+  let intervalMinutes = 10;
+  let count = 18;
+
+  if (hours === 3) {
+    intervalMinutes = 10;
+    count = 18;
+  } else if (hours === 6) {
+    intervalMinutes = 10;
+    count = 36;
+  } else if (hours === 12) {
+    intervalMinutes = 15;
+    count = 48;
+  } else if (hours === 24) {
+    intervalMinutes = 30;
+    count = 48;
+  }
+
   // Scan terbaru yang sudah stabil di NASA GIBS (~25 menit sebelum sekarang)
-  const latestScanMs = Math.floor((now.getTime() - 25 * 60 * 1000) / (10 * 60 * 1000)) * (10 * 60 * 1000);
+  const intervalMs = intervalMinutes * 60 * 1000;
+  const latestScanMs = Math.floor((now.getTime() - 25 * 60 * 1000) / intervalMs) * intervalMs;
 
   for (let i = count - 1; i >= 0; i--) {
-    const frameMs = latestScanMs - (i * 10 * 60 * 1000);
+    const frameMs = latestScanMs - (i * intervalMs);
     const d = new Date(frameMs);
     const iso = d.toISOString().slice(0, 19) + 'Z';
 

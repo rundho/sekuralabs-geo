@@ -1,7 +1,15 @@
 import React from 'react';
 import { Wind, CloudRain, Flame, Radio, Moon, Globe, Sun, X, Sliders, MapPin, Satellite, Clock, Play } from 'lucide-react';
 import type { BasemapType } from './MapContainer';
-import { type SatelliteMode, SATELLITE_MODES } from '../core/satellite';
+import {
+  type SatelliteMode,
+  type SatelliteAnimationSpeed,
+  type SatelliteLoopDuration,
+  type SatelliteAnimationStyle,
+  SATELLITE_MODES,
+  SATELLITE_DURATIONS,
+  SATELLITE_SPEED_CONFIGS,
+} from '../core/satellite';
 
 interface LayerControlDrawerProps {
   open: boolean;
@@ -31,6 +39,12 @@ interface LayerControlDrawerProps {
   onSatelliteModeChange: (mode: SatelliteMode) => void;
   satelliteLoopActive: boolean;
   onToggleSatelliteLoop: (loop: boolean) => void;
+  satelliteSpeed?: SatelliteAnimationSpeed;
+  onSatelliteSpeedChange?: (speed: SatelliteAnimationSpeed) => void;
+  satelliteDuration?: SatelliteLoopDuration;
+  onSatelliteDurationChange?: (hours: SatelliteLoopDuration) => void;
+  satelliteStyle?: SatelliteAnimationStyle;
+  onSatelliteStyleChange?: (style: SatelliteAnimationStyle) => void;
 }
 
 export const LayerControlDrawer: React.FC<LayerControlDrawerProps> = ({
@@ -61,6 +75,12 @@ export const LayerControlDrawer: React.FC<LayerControlDrawerProps> = ({
   onSatelliteModeChange,
   satelliteLoopActive,
   onToggleSatelliteLoop,
+  satelliteSpeed = 'medium',
+  onSatelliteSpeedChange,
+  satelliteDuration = 3,
+  onSatelliteDurationChange,
+  satelliteStyle = 'smooth',
+  onSatelliteStyleChange,
 }) => {
   return (
     <aside className={`geo-sidebar ${open ? '' : 'collapsed'}`}>
@@ -379,6 +399,92 @@ export const LayerControlDrawer: React.FC<LayerControlDrawerProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {/* Pengaturan Animasi Satelit Lengkap (Persis Zoom Earth) */}
+                {satelliteLoopActive && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                      marginTop: 6,
+                      padding: '10px 12px',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(255, 255, 255, 0.07)',
+                    }}
+                  >
+                    {/* Kecepatan Animasi */}
+                    <div className="satellite-setting-group">
+                      <div className="satellite-setting-label">
+                        <span>KECEPATAN ANIMASI</span>
+                        <span style={{ color: '#00e5ff', textTransform: 'capitalize' }}>
+                          {SATELLITE_SPEED_CONFIGS[satelliteSpeed || 'medium'].label}
+                        </span>
+                      </div>
+                      <div className="setting-segment">
+                        {(['slow', 'medium', 'fast'] as SatelliteAnimationSpeed[]).map((spd) => (
+                          <button
+                            key={spd}
+                            type="button"
+                            className={`setting-segment-btn ${satelliteSpeed === spd ? 'active' : ''}`}
+                            onClick={() => onSatelliteSpeedChange?.(spd)}
+                          >
+                            {SATELLITE_SPEED_CONFIGS[spd].label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Rentang Durasi Loop Satelit */}
+                    <div className="satellite-setting-group">
+                      <div className="satellite-setting-label">
+                        <span>RENTANG LOOP SATELIT</span>
+                        <span style={{ color: '#00e5ff' }}>{satelliteDuration || 3} Jam</span>
+                      </div>
+                      <div className="setting-segment">
+                        {SATELLITE_DURATIONS.map((dur) => (
+                          <button
+                            key={dur.hours}
+                            type="button"
+                            className={`setting-segment-btn ${satelliteDuration === dur.hours ? 'active' : ''}`}
+                            onClick={() => onSatelliteDurationChange?.(dur.hours)}
+                          >
+                            {dur.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Gaya Animasi Satelit (Mulus vs Cepat) */}
+                    <div className="satellite-setting-group">
+                      <div className="satellite-setting-label">
+                        <span>GAYA ANIMASI SATELIT</span>
+                        <span style={{ color: '#00e5ff' }}>
+                          {satelliteStyle === 'smooth' ? 'Mulus (Crossfade)' : 'Cepat (Langsung)'}
+                        </span>
+                      </div>
+                      <div className="setting-segment">
+                        <button
+                          type="button"
+                          className={`setting-segment-btn ${satelliteStyle === 'fast' ? 'active' : ''}`}
+                          onClick={() => onSatelliteStyleChange?.('fast')}
+                          title="Pergantian frame langsung tanpa crossfade"
+                        >
+                          Cepat
+                        </button>
+                        <button
+                          type="button"
+                          className={`setting-segment-btn ${satelliteStyle === 'smooth' ? 'active' : ''}`}
+                          onClick={() => onSatelliteStyleChange?.('smooth')}
+                          title="Interpolasi crossfade halus antar frame (Zoom Earth)"
+                        >
+                          Mulus (Smooth)
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
