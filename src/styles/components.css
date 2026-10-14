@@ -1037,3 +1037,97 @@ input:checked + .slider-toggle::before {
   border-top-color: rgba(15, 23, 42, 0.95) !important;
 }
 
+/* --------------------------------------------------------------------------
+   11. Citra Satelit Himawari-9 (Mode Selector & Timeline Controls)
+   -------------------------------------------------------------------------- */
+.satellite-mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.satellite-mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.satellite-mode-btn:hover {
+  background: rgba(0, 229, 255, 0.08);
+  border-color: rgba(0, 229, 255, 0.3);
+  color: var(--text-main);
+}
+
+.satellite-mode-btn.active {
+  background: rgba(0, 229, 255, 0.18);
+  border-color: var(--accent-cyan);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+}
+
+.satellite-mode-name {
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.satellite-mode-badge {
+  font-size: 0.62rem;
+  color: var(--accent-cyan);
+  margin-top: 3px;
+  opacity: 0.85;
+}
+
+.satellite-mode-btn.active .satellite-mode-badge {
+  opacity: 1;
+  font-weight: 600;
+}
+
+.timeline-mode-toggle {
+  display: flex;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.timeline-mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.timeline-mode-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.timeline-mode-btn.active {
+  background: var(--accent-cyan);
+  color: #030712;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 229, 255, 0.35);
+}
+

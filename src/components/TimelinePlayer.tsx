@@ -8,6 +8,8 @@ interface TimelinePlayerProps {
   onStepChange: (index: number) => void;
   onTogglePlay: () => void;
   onJumpToLive: () => void;
+  modelLabel?: string;
+  isSatelliteLoop?: boolean;
 }
 
 const MONTH_NAMES_ID = [
@@ -22,15 +24,20 @@ export const TimelinePlayer: React.FC<TimelinePlayerProps> = ({
   onStepChange,
   onTogglePlay,
   onJumpToLive,
+  modelLabel = 'CAMS 0.4°',
+  isSatelliteLoop = false,
 }) => {
   if (!times || times.length === 0) return null;
 
   const currentTimeStr = times[currentStepIndex] || times[0];
 
   // Parse ISO timestamp into WIB format
-  const formatIndonesianTime = (iso: string) => {
+  const formatIndonesianTime = (rawIso: string) => {
     try {
-      const d = new Date(`${iso}:00Z`);
+      const cleanIso = rawIso.includes('T')
+        ? rawIso.endsWith('Z') ? rawIso : `${rawIso}Z`
+        : `${rawIso}:00Z`;
+      const d = new Date(cleanIso);
       const utcH = d.getUTCHours();
       const utcM = d.getUTCMinutes();
       const wibH = (utcH + 7) % 24;
@@ -81,8 +88,8 @@ export const TimelinePlayer: React.FC<TimelinePlayerProps> = ({
             <button
               className="player-btn"
               onClick={handlePrev}
-              title="1 Jam Sebelumnya"
-              aria-label="Previous Hour"
+              title={isSatelliteLoop ? '10 Menit Sebelumnya' : '1 Jam Sebelumnya'}
+              aria-label="Previous Step"
             >
               <ChevronLeft size={18} />
             </button>
@@ -101,8 +108,8 @@ export const TimelinePlayer: React.FC<TimelinePlayerProps> = ({
             <button
               className="player-btn"
               onClick={handleNext}
-              title="1 Jam Berikutnya"
-              aria-label="Next Hour"
+              title={isSatelliteLoop ? '10 Menit Berikutnya' : '1 Jam Berikutnya'}
+              aria-label="Next Step"
             >
               <ChevronRight size={18} />
             </button>
@@ -143,8 +150,12 @@ export const TimelinePlayer: React.FC<TimelinePlayerProps> = ({
         </div>
 
         {/* Model info pill (desktop only) */}
-        <div className="model-pill" title="Model Resolusi CAMS 0.4° & GFS 10m">
-          CAMS 0.4°
+        <div
+          className="model-pill"
+          title={isSatelliteLoop ? 'Citra Satelit Geostasioner Himawari-9 (JMA/NASA GIBS)' : 'Model Resolusi CAMS 0.4° & GFS 10m'}
+          style={isSatelliteLoop ? { borderColor: 'rgba(56, 189, 248, 0.4)', color: '#38bdf8' } : undefined}
+        >
+          {modelLabel}
         </div>
       </div>
     </div>

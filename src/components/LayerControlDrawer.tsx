@@ -1,6 +1,7 @@
 import React from 'react';
-import { Wind, CloudRain, Flame, Radio, Moon, Globe, Sun, X, Sliders, MapPin } from 'lucide-react';
+import { Wind, CloudRain, Flame, Radio, Moon, Globe, Sun, X, Sliders, MapPin, Satellite, Clock, Play } from 'lucide-react';
 import type { BasemapType } from './MapContainer';
+import { type SatelliteMode, SATELLITE_MODES } from '../core/satellite';
 
 interface LayerControlDrawerProps {
   open: boolean;
@@ -22,6 +23,14 @@ interface LayerControlDrawerProps {
   hotspotsVisible: boolean;
   onToggleHotspots: (v: boolean) => void;
   hotspotsCount?: number;
+  satelliteVisible: boolean;
+  onToggleSatellite: (v: boolean) => void;
+  satelliteOpacity: number;
+  onSatelliteOpacityChange: (op: number) => void;
+  satelliteMode: SatelliteMode;
+  onSatelliteModeChange: (mode: SatelliteMode) => void;
+  satelliteLoopActive: boolean;
+  onToggleSatelliteLoop: (loop: boolean) => void;
 }
 
 export const LayerControlDrawer: React.FC<LayerControlDrawerProps> = ({
@@ -44,6 +53,14 @@ export const LayerControlDrawer: React.FC<LayerControlDrawerProps> = ({
   hotspotsVisible,
   onToggleHotspots,
   hotspotsCount,
+  satelliteVisible,
+  onToggleSatellite,
+  satelliteOpacity,
+  onSatelliteOpacityChange,
+  satelliteMode,
+  onSatelliteModeChange,
+  satelliteLoopActive,
+  onToggleSatelliteLoop,
 }) => {
   return (
     <aside className={`geo-sidebar ${open ? '' : 'collapsed'}`}>
@@ -270,6 +287,101 @@ export const LayerControlDrawer: React.FC<LayerControlDrawerProps> = ({
               </div>
             )}
           </div>
+          {/* Active Layer: Citra Satelit Awan & Asap (JMA Himawari-9 / NASA GIBS) */}
+          <div className="layer-card" style={{ marginTop: 10 }}>
+            <div className="layer-head">
+              <div className="layer-info">
+                <div className="layer-icon-box" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
+                  <Satellite size={18} />
+                </div>
+                <div className="layer-text">
+                  <h4>Satelit Awan & Asap</h4>
+                  <p>Himawari-9 Live 10m (JMA / NASA)</p>
+                </div>
+              </div>
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={satelliteVisible}
+                  onChange={(e) => onToggleSatellite(e.target.checked)}
+                />
+                <span className="slider-toggle" />
+              </label>
+            </div>
+
+            {satelliteVisible && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+                {/* Opasitas Slider */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div className="control-row">
+                    <span>Opasitas Citra Satelit:</span>
+                    <span>{Math.round(satelliteOpacity * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    className="range-slider"
+                    min={0.1}
+                    max={1.0}
+                    step={0.05}
+                    value={satelliteOpacity}
+                    onChange={(e) => onSatelliteOpacityChange(parseFloat(e.target.value))}
+                  />
+                </div>
+
+                {/* Pemilihan Mode Spektral Satelit */}
+                <div>
+                  <div className="control-row" style={{ marginBottom: 4 }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#94a3b8' }}>
+                      MODE SPEKTRAL SATELIT
+                    </span>
+                  </div>
+                  <div className="satellite-mode-grid">
+                    {SATELLITE_MODES.map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        className={`satellite-mode-btn ${satelliteMode === opt.id ? 'active' : ''}`}
+                        onClick={() => onSatelliteModeChange(opt.id)}
+                        title={opt.description}
+                      >
+                        <span className="satellite-mode-name">{opt.label}</span>
+                        <span className="satellite-mode-badge">{opt.badge}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Toggle Mode Linimasa: Garis Waktu Utama vs Loop 10-Menit Zoom Earth */}
+                <div>
+                  <div className="control-row" style={{ marginBottom: 4 }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#94a3b8' }}>
+                      KONTROL LINIMASA PEMUTAR
+                    </span>
+                  </div>
+                  <div className="timeline-mode-toggle">
+                    <button
+                      type="button"
+                      className={`timeline-mode-btn ${!satelliteLoopActive ? 'active' : ''}`}
+                      onClick={() => onToggleSatelliteLoop(false)}
+                      title="Garis waktu mengikuti model udara CAMS (per jam)"
+                    >
+                      <Clock size={13} />
+                      <span>Sinkron Utama</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`timeline-mode-btn ${satelliteLoopActive ? 'active' : ''}`}
+                      onClick={() => onToggleSatelliteLoop(true)}
+                      title="Animasi cepat interval 10 menit (3 jam terakhir, Zoom Earth style)"
+                    >
+                      <Play size={13} />
+                      <span>Loop 10-Menit</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Future Scope Layers (v2.1+) */}
@@ -279,15 +391,7 @@ export const LayerControlDrawer: React.FC<LayerControlDrawerProps> = ({
             <div className="future-layer-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <CloudRain size={16} color="#60a5fa" />
-                <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>Radar Hujan (BMKG)</span>
-              </div>
-              <span className="soon-tag">Segera Hadir</span>
-            </div>
-
-            <div className="future-layer-card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Globe size={16} color="#34d399" />
-                <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>Satelit Himawari-9</span>
+                <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>Radar Hujan Presipitasi (BMKG)</span>
               </div>
               <span className="soon-tag">Segera Hadir</span>
             </div>

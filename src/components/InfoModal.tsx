@@ -29,9 +29,11 @@ export const InfoModal: React.FC<InfoModalProps> = ({ open, onClose }) => {
               <Database size={16} />
               <span>Sumber Data Resmi</span>
             </div>
-            <p style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+            <p style={{ fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.6 }}>
+              • <strong>Citra Satelit Cuaca Awan & Asap</strong>: Japan Meteorological Agency (JMA) Himawari-9 & NASA GIBS Near Real-Time (NRT) 10-menit.<br />
               • <strong>Kualitas Udara PM2.5</strong>: Copernicus Atmosphere Monitoring Service (CAMS) resolusi ~0.4° via Copernicus ADS.<br />
-              • <strong>Aliran Angin 10 Meter</strong>: National Oceanic and Atmospheric Administration (NOAA) Global Forecast System (GFS).
+              • <strong>Aliran Angin 10 Meter</strong>: National Oceanic and Atmospheric Administration (NOAA) Global Forecast System (GFS).<br />
+              • <strong>Titik Panas Karhutla</strong>: NASA FIRMS Suomi NPP / NOAA-20 VIIRS 375m.
             </p>
           </div>
 

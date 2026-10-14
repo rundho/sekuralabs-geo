@@ -18,6 +18,12 @@ import { handleMapInspectionClick } from './components/LocationPopup';
 import { fetchLiveIqairFeed, getHydratedStations, type HydratedAirStation } from './core/iqair';
 import { CoastlineLayer } from './components/CoastlineLayer';
 import { CityLabelsLayer } from './components/CityLabelsLayer';
+import { SatelliteCloudLayer } from './components/SatelliteCloudLayer';
+import {
+  type SatelliteMode,
+  type SatelliteLoopFrame,
+  generateSatelliteLoopFrames,
+} from './core/satellite';
 
 export const App: React.FC = () => {
   const [map, setMap] = useState<maplibregl.Map | null>(null);
@@ -36,6 +42,17 @@ export const App: React.FC = () => {
   const [windSpeedMultiplier, setWindSpeedMultiplier] = useState(1.0);
   const [hotspotsVisible, setHotspotsVisible] = useState(false);
   const [hotspotsCount, setHotspotsCount] = useState(0);
+
+  // Satellite Himawari-9 layer settings
+  const [satelliteVisible, setSatelliteVisible] = useState(false);
+  const [satelliteOpacity, setSatelliteOpacity] = useState(0.85);
+  const [satelliteMode, setSatelliteMode] = useState<SatelliteMode>('auto');
+  const [satelliteLoopActive, setSatelliteLoopActive] = useState(false);
+  const [satelliteFrames, setSatelliteFrames] = useState<SatelliteLoopFrame[]>(() =>
+    generateSatelliteLoopFrames(18),
+  );
+  const [satelliteStepIndex, setSatelliteStepIndex] = useState(17);
+  const [, setResolvedSatelliteMode] = useState<'visible' | 'infrared' | 'airmass'>('infrared');
 
   // Selected station for IQAir detail card
   const [selectedStation, setSelectedStation] = useState<HydratedAirStation | null>(null);
@@ -104,21 +121,29 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Playback timer loop
+  // Playback timer loop (mendukung per jam CAMS maupun loop 10-menit Himawari)
   useEffect(() => {
-    if (!playing || !index || index.times.length === 0) {
+    if (!playing) {
       if (playTimerRef.current) clearInterval(playTimerRef.current);
       return;
     }
 
-    playTimerRef.current = window.setInterval(() => {
-      setCurrentStepIndex((prev) => (prev + 1) % index.times.length);
-    }, 1800);
+    if (satelliteLoopActive) {
+      if (satelliteFrames.length === 0) return;
+      playTimerRef.current = window.setInterval(() => {
+        setSatelliteStepIndex((prev) => (prev + 1) % satelliteFrames.length);
+      }, 850);
+    } else {
+      if (!index || index.times.length === 0) return;
+      playTimerRef.current = window.setInterval(() => {
+        setCurrentStepIndex((prev) => (prev + 1) % index.times.length);
+      }, 1800);
+    }
 
     return () => {
       if (playTimerRef.current) clearInterval(playTimerRef.current);
     };
-  }, [playing, index]);
+  }, [playing, satelliteLoopActive, satelliteFrames, index]);
 
   // Sinkronisasi data kartu stasiun yang sedang terbuka saat grid CAMS berganti jam
   useEffect(() => {
@@ -132,6 +157,13 @@ export const App: React.FC = () => {
 
   // Jump to live timestamp
   const handleJumpToLive = useCallback(() => {
+    if (satelliteLoopActive) {
+      // Ke frame satelit 10-menit paling baru
+      setSatelliteStepIndex(satelliteFrames.length - 1);
+      setPlaying(false);
+      return;
+    }
+
     if (!index || index.times.length === 0) return;
     const nowMs = Date.now();
     let closestIdx = 0;
@@ -148,7 +180,7 @@ export const App: React.FC = () => {
 
     setCurrentStepIndex(closestIdx);
     setPlaying(false);
-  }, [index]);
+  }, [satelliteLoopActive, satelliteFrames, index]);
 
   // Map inspection click handler
   const handleMapClick = useCallback(
@@ -238,6 +270,20 @@ export const App: React.FC = () => {
         {/* Lapisan Garis Pantai & Kontur Pulau Nusantara (High-contrast island boundaries) */}
         <CoastlineLayer map={map} visible={showLabels} />
 
+        {/* Lapisan Citra Satelit Awan & Asap Geostasioner Himawari-9 (NASA GIBS) */}
+        <SatelliteCloudLayer
+          map={map}
+          visible={satelliteVisible}
+          opacity={satelliteOpacity}
+          mode={satelliteMode}
+          currentTimeIso={
+            satelliteLoopActive
+              ? satelliteFrames[satelliteStepIndex]?.iso
+              : index?.times[currentStepIndex]
+          }
+          onResolvedModeChange={setResolvedSatelliteMode}
+        />
+
         {/* Lapisan Label Nama Kota & Ibukota Vektor Presisi (Pontianak selalu tampak) */}
         <CityLabelsLayer map={map} visible={showLabels} />
 
@@ -276,6 +322,22 @@ export const App: React.FC = () => {
         hotspotsVisible={hotspotsVisible}
         onToggleHotspots={setHotspotsVisible}
         hotspotsCount={hotspotsCount}
+        satelliteVisible={satelliteVisible}
+        onToggleSatellite={setSatelliteVisible}
+        satelliteOpacity={satelliteOpacity}
+        onSatelliteOpacityChange={setSatelliteOpacity}
+        satelliteMode={satelliteMode}
+        onSatelliteModeChange={setSatelliteMode}
+        satelliteLoopActive={satelliteLoopActive}
+        onToggleSatelliteLoop={(active) => {
+          if (active) {
+            setSatelliteFrames(generateSatelliteLoopFrames(18));
+            setSatelliteStepIndex(17);
+            setSatelliteVisible(true);
+          }
+          setSatelliteLoopActive(active);
+          setPlaying(false);
+        }}
       />
 
       {/* Right Quick Controls (Zoom, Geolocation, Layer Toggle) */}
@@ -302,17 +364,23 @@ export const App: React.FC = () => {
       <LegendBar visible={pm25Visible} />
 
       {/* Zoom Earth Style Bottom Timeline Player */}
-      {index && (
+      {(satelliteLoopActive || index) && (
         <TimelinePlayer
-          times={index.times}
-          currentStepIndex={currentStepIndex}
+          times={satelliteLoopActive ? satelliteFrames.map((f) => f.iso) : index?.times || []}
+          currentStepIndex={satelliteLoopActive ? satelliteStepIndex : currentStepIndex}
           playing={playing}
           onStepChange={(idx) => {
-            setCurrentStepIndex(idx);
+            if (satelliteLoopActive) {
+              setSatelliteStepIndex(idx);
+            } else {
+              setCurrentStepIndex(idx);
+            }
             setPlaying(false);
           }}
           onTogglePlay={() => setPlaying((p) => !p)}
           onJumpToLive={handleJumpToLive}
+          modelLabel={satelliteLoopActive ? 'Himawari-9 10m' : 'CAMS 0.4°'}
+          isSatelliteLoop={satelliteLoopActive}
         />
       )}
 
