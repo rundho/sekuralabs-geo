@@ -34,7 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
           </svg>
         </div>
         <div className="brand-title">
-          SekuraLabs Geo
+          <span className="brand-name">SekuraLabs Geo</span>
           <span className="brand-badge">Alpha 0.1</span>
         </div>
       </div>
@@ -64,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <button
-          className="icon-btn"
+          className="icon-btn fullscreen-btn"
           onClick={toggleFullscreen}
           title={isFullscreen ? 'Keluar Layar Penuh' : 'Mode Layar Penuh'}
           aria-label="Fullscreen"

@@ -74,43 +74,62 @@ export const TimelinePlayer: React.FC<TimelinePlayerProps> = ({
   return (
     <div className="timeline-player-container">
       <div className="player-card">
-        {/* Step Backward */}
-        <button
-          className="player-btn"
-          onClick={handlePrev}
-          title="1 Jam Sebelumnya"
-          aria-label="Previous Hour"
-        >
-          <ChevronLeft size={18} />
-        </button>
+        {/* Main row: controls, time display, live button */}
+        <div className="player-main-row">
+          <div className="player-btn-group">
+            {/* Step Backward */}
+            <button
+              className="player-btn"
+              onClick={handlePrev}
+              title="1 Jam Sebelumnya"
+              aria-label="Previous Hour"
+            >
+              <ChevronLeft size={18} />
+            </button>
 
-        {/* Play/Pause Button */}
-        <button
-          className="player-btn play-btn"
-          onClick={onTogglePlay}
-          title={playing ? 'Jeda Simulasi' : 'Mulai Putar Simulasi'}
-          aria-label={playing ? 'Pause' : 'Play'}
-        >
-          {playing ? <Pause size={18} /> : <Play size={18} style={{ marginLeft: 2 }} />}
-        </button>
+            {/* Play/Pause Button */}
+            <button
+              className="player-btn play-btn"
+              onClick={onTogglePlay}
+              title={playing ? 'Jeda Simulasi' : 'Mulai Putar Simulasi'}
+              aria-label={playing ? 'Pause' : 'Play'}
+            >
+              {playing ? <Pause size={18} /> : <Play size={18} style={{ marginLeft: 2 }} />}
+            </button>
 
-        {/* Step Forward */}
-        <button
-          className="player-btn"
-          onClick={handleNext}
-          title="1 Jam Berikutnya"
-          aria-label="Next Hour"
-        >
-          <ChevronRight size={18} />
-        </button>
+            {/* Step Forward */}
+            <button
+              className="player-btn"
+              onClick={handleNext}
+              title="1 Jam Berikutnya"
+              aria-label="Next Hour"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
 
-        {/* Date & Time Display */}
-        <div className="time-display-box">
-          <span className="time-val">{timeFormatted}</span>
-          <span className="time-date">{dateFormatted}</span>
+          {/* Date & Time Display */}
+          <div className="time-display-box">
+            <span className="time-val">{timeFormatted}</span>
+            <span className="time-date">{dateFormatted}</span>
+          </div>
+
+          {/* Jump to Live Button */}
+          <button
+            className="live-jump-btn"
+            onClick={onJumpToLive}
+            title="Kembali ke Waktu Terkini"
+            style={{
+              opacity: isLive ? 0.7 : 1,
+              boxShadow: isLive ? 'none' : '0 0 10px rgba(16, 185, 129, 0.4)',
+            }}
+          >
+            <Zap size={12} style={{ display: 'inline', marginRight: 4 }} />
+            LIVE
+          </button>
         </div>
 
-        {/* Scrub Slider */}
+        {/* Scrub Slider (Row 2 on mobile, inline on desktop) */}
         <div className="slider-track-wrap">
           <input
             type="range"
@@ -123,21 +142,7 @@ export const TimelinePlayer: React.FC<TimelinePlayerProps> = ({
           />
         </div>
 
-        {/* Jump to Live Button */}
-        <button
-          className="live-jump-btn"
-          onClick={onJumpToLive}
-          title="Kembali ke Waktu Terkini"
-          style={{
-            opacity: isLive ? 0.7 : 1,
-            boxShadow: isLive ? 'none' : '0 0 10px rgba(16, 185, 129, 0.4)',
-          }}
-        >
-          <Zap size={12} style={{ display: 'inline', marginRight: 4 }} />
-          LIVE
-        </button>
-
-        {/* Model info pill */}
+        {/* Model info pill (desktop only) */}
         <div className="model-pill" title="Model Resolusi CAMS 0.4° & GFS 10m">
           CAMS 0.4°
         </div>
