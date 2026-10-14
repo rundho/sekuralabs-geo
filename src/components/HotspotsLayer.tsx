@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import { fetchHotspotsFeed, hotspotsToGeoJSON } from '../core/hotspots';
 
@@ -18,110 +18,106 @@ export const HotspotsLayer: React.FC<HotspotsLayerProps> = ({
   onCountChange,
 }) => {
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const geojsonDataRef = useRef<GeoJSON.FeatureCollection<GeoJSON.Point> | null>(null);
+  const clickListenersAttachedRef = useRef(false);
 
-  useEffect(() => {
-    if (!map) return;
+  // Helper untuk memasang/memastikan source & layer hotspot terpasang pada map
+  const ensureHotspotLayers = useCallback(() => {
+    if (!map || !geojsonDataRef.current) return;
+    const geojson = geojsonDataRef.current;
 
-    let cancelled = false;
-
-    const initHotspots = async () => {
-      const feed = await fetchHotspotsFeed();
-      if (cancelled || !map) return;
-
-      if (onCountChange) {
-        onCountChange(feed.count);
-      }
-
-      const geojson = hotspotsToGeoJSON(feed.hotspots);
-
-      if (map.getSource(SRC_HOTSPOTS)) {
-        const src = map.getSource(SRC_HOTSPOTS) as maplibregl.GeoJSONSource;
-        src.setData(geojson);
-        return;
-      }
-
-      // GeoJSON Source langsung tanpa clustering pizza-bubble dan tanpa heatmap blur tebal
+    // 1. GeoJSON Source
+    if (!map.getSource(SRC_HOTSPOTS)) {
       map.addSource(SRC_HOTSPOTS, {
         type: 'geojson',
         data: geojson,
       });
+    } else {
+      const src = map.getSource(SRC_HOTSPOTS) as maplibregl.GeoJSONSource;
+      src.setData(geojson);
+    }
 
-      const beforeId = map.getLayer('basemap-labels') ? 'basemap-labels' : undefined;
-
-      // 1. Halo Pendaran Panas (Soft Radial Thermal Glow di sekeliling setiap titik api)
-      map.addLayer(
-        {
-          id: LYR_EMBER_HALO,
-          type: 'circle',
-          source: SRC_HOTSPOTS,
-          layout: { visibility: visible ? 'visible' : 'none' },
-          paint: {
-            'circle-color': [
-              'interpolate',
-              ['linear'],
-              ['get', 'frp'],
-              1, '#f97316',
-              15, '#ea580c',
-              50, '#dc2626',
-            ],
-            'circle-radius': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              3, 3.2,
-              6, 5.5,
-              10, 9.0,
-              14, 16.0,
-            ],
-            'circle-blur': 0.75,
-            'circle-opacity': 0.55,
-          },
+    // 2. Halo Pendaran Panas (Soft Radial Thermal Glow di sekeliling setiap titik api)
+    if (!map.getLayer(LYR_EMBER_HALO)) {
+      map.addLayer({
+        id: LYR_EMBER_HALO,
+        type: 'circle',
+        source: SRC_HOTSPOTS,
+        layout: { visibility: visible ? 'visible' : 'none' },
+        paint: {
+          'circle-color': [
+            'interpolate',
+            ['linear'],
+            ['get', 'frp'],
+            1, '#f97316',
+            15, '#ea580c',
+            50, '#dc2626',
+          ],
+          'circle-radius': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            3, 3.2,
+            6, 5.5,
+            10, 9.0,
+            14, 16.0,
+          ],
+          'circle-blur': 0.75,
+          'circle-opacity': 0.65,
         },
-        beforeId,
-      );
+      });
+    }
 
-      // 2. Inti Bara Api (Crisp Fire Spark / Ember Dot - Presisi, Tajam & Estetis)
-      map.addLayer(
-        {
-          id: LYR_EMBER_CORE,
-          type: 'circle',
-          source: SRC_HOTSPOTS,
-          layout: { visibility: visible ? 'visible' : 'none' },
-          paint: {
-            'circle-color': [
-              'interpolate',
-              ['linear'],
-              ['get', 'frp'],
-              1, '#f59e0b',
-              10, '#ea580c',
-              40, '#dc2626',
-              100, '#b91c1c',
-            ],
-            'circle-radius': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              3, 1.4,
-              6, 2.6,
-              10, 4.2,
-              14, 7.0,
-            ],
-            'circle-stroke-width': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              3, 0.4,
-              7, 0.9,
-              12, 1.4,
-            ],
-            'circle-stroke-color': '#ffffff',
-            'circle-opacity': 0.95,
-          },
+    // 3. Inti Bara Api (Crisp Fire Spark / Ember Dot - Presisi, Tajam & Estetis)
+    if (!map.getLayer(LYR_EMBER_CORE)) {
+      map.addLayer({
+        id: LYR_EMBER_CORE,
+        type: 'circle',
+        source: SRC_HOTSPOTS,
+        layout: { visibility: visible ? 'visible' : 'none' },
+        paint: {
+          'circle-color': [
+            'interpolate',
+            ['linear'],
+            ['get', 'frp'],
+            1, '#f59e0b',
+            10, '#ea580c',
+            40, '#dc2626',
+            100, '#b91c1c',
+          ],
+          'circle-radius': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            3, 1.8,
+            6, 3.0,
+            10, 4.8,
+            14, 7.5,
+          ],
+          'circle-stroke-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            3, 0.6,
+            7, 1.1,
+            12, 1.6,
+          ],
+          'circle-stroke-color': '#ffffff',
+          'circle-opacity': 0.95,
         },
-        beforeId,
-      );
+      });
+    }
 
-      // Event Klik Titik Api: Buka Kartu Popup Detail
+    // Pastikan jika layer PM2.5 ada, titik api hotspot selalu berada di atas layer asap PM2.5
+    if (map.getLayer('sekura-lyr-pm25')) {
+      if (map.getLayer(LYR_EMBER_HALO)) map.moveLayer(LYR_EMBER_HALO);
+      if (map.getLayer(LYR_EMBER_CORE)) map.moveLayer(LYR_EMBER_CORE);
+    }
+
+    // Pasang click & hover handlers sekali saja
+    if (!clickListenersAttachedRef.current) {
+      clickListenersAttachedRef.current = true;
+
       const handleHotspotClick = (e: maplibregl.MapLayerMouseEvent) => {
         if (!e.features || !e.features[0]) return;
         const f = e.features[0];
@@ -182,7 +178,6 @@ export const HotspotsLayer: React.FC<HotspotsLayerProps> = ({
       map.on('click', LYR_EMBER_CORE, handleHotspotClick);
       map.on('click', LYR_EMBER_HALO, handleHotspotClick);
 
-      // Hover Pointer Cursor
       const setPointer = () => (map.getCanvas().style.cursor = 'pointer');
       const resetCursor = () => (map.getCanvas().style.cursor = '');
 
@@ -190,21 +185,52 @@ export const HotspotsLayer: React.FC<HotspotsLayerProps> = ({
       map.on('mouseleave', LYR_EMBER_CORE, resetCursor);
       map.on('mouseenter', LYR_EMBER_HALO, setPointer);
       map.on('mouseleave', LYR_EMBER_HALO, resetCursor);
+    }
+  }, [map, visible]);
+
+  // Muat data titik panas saat inisialisasi
+  useEffect(() => {
+    if (!map) return;
+    let cancelled = false;
+
+    const initHotspots = async () => {
+      const feed = await fetchHotspotsFeed();
+      if (cancelled || !map) return;
+
+      if (onCountChange) {
+        onCountChange(feed.count);
+      }
+
+      const geojson = hotspotsToGeoJSON(feed.hotspots);
+      geojsonDataRef.current = geojson;
+
+      ensureHotspotLayers();
     };
 
     void initHotspots();
 
+    // Dengarkan style.load jika suatu saat ada event style reload
+    map.on('style.load', ensureHotspotLayers);
+
     return () => {
       cancelled = true;
+      if (map) {
+        map.off('style.load', ensureHotspotLayers);
+      }
       if (popupRef.current) popupRef.current.remove();
     };
-  }, [map]);
+  }, [map, ensureHotspotLayers, onCountChange]);
 
-  // Update visibilitas layer dinamis
+  // Update visibilitas layer saat toggle diaktifkan / dinonaktifkan
   useEffect(() => {
     if (!map) return;
-    const lyrIds = [LYR_EMBER_HALO, LYR_EMBER_CORE];
 
+    // Pastikan layer sudah terpasang jika baru saja diaktifkan
+    if (visible && (!map.getLayer(LYR_EMBER_CORE) || !map.getSource(SRC_HOTSPOTS))) {
+      ensureHotspotLayers();
+    }
+
+    const lyrIds = [LYR_EMBER_HALO, LYR_EMBER_CORE];
     lyrIds.forEach((id) => {
       if (map.getLayer(id)) {
         map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
@@ -214,7 +240,7 @@ export const HotspotsLayer: React.FC<HotspotsLayerProps> = ({
     if (!visible && popupRef.current) {
       popupRef.current.remove();
     }
-  }, [map, visible]);
+  }, [map, visible, ensureHotspotLayers]);
 
   return null;
 };
